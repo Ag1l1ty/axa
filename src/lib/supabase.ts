@@ -10,9 +10,10 @@ export const isSupabaseConfigured = supabaseUrl !== 'https://dummy.supabase.co' 
 let supabaseInstance: SupabaseClient | null = null
 let supabaseAdminInstance: SupabaseClient | null = null
 
-// Cliente Supabase normal para operaciones de usuario
-export const supabase = (() => {
+// Función para obtener el cliente Supabase
+export const getSupabaseClient = () => {
   if (!supabaseInstance && isSupabaseConfigured) {
+    console.log('Creating new Supabase client instance')
     supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: true,
@@ -22,7 +23,10 @@ export const supabase = (() => {
     })
   }
   return supabaseInstance
-})()
+}
+
+// Cliente Supabase normal para operaciones de usuario
+export const supabase = getSupabaseClient()
 
 // Cliente Supabase admin para crear usuarios sin auto-login
 export const supabaseAdmin = (() => {
