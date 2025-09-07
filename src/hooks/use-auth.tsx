@@ -107,7 +107,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Escuchar cambios de autenticación
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state change:', event, session?.user?.email)
+        console.log('🔄 Auth state change:', event, session?.user?.email)
+        console.log('📅 Session expires at:', session?.expires_at ? new Date(session.expires_at * 1000) : 'N/A')
+        
+        if (event === 'TOKEN_REFRESHED') {
+          console.log('🔄 Token refreshed successfully')
+        }
+        
+        if (event === 'SIGNED_OUT') {
+          console.log('👋 User signed out')
+          setUser(null)
+          setProfile(null)
+          setLoading(false)
+          return
+        }
         
         if (session?.user) {
           const authUser = session.user as AuthUser
@@ -115,9 +128,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           try {
             const userProfile = await getUserProfile(authUser.id)
             setProfile(userProfile)
+            console.log('✅ Profile loaded for:', authUser.email)
           } catch (error) {
-            console.error('Error getting profile after auth change:', error)
-            setProfile(null)
+            console.error('❌ Error getting profile after auth change:', error)
+            // Si falla el profile, intentar refrescar sesión
+            if (error.message?.includes('JWT') || error.message?.includes('expired')) {
+              console.log('🔄 Attempting to refresh session due to token error')
+              try {
+                await supabase.auth.refreshSession()
+              } catch (refreshError) {
+                console.error('❌ Failed to refresh session:', refreshError)
+                setUser(null)
+                setProfile(null)
+              }
+            } else {
+              setProfile(null)
+            }
           }
         } else {
           setUser(null)

@@ -30,6 +30,30 @@ export async function testSupabaseConnection() {
   }
 }
 
+// Helper para manejar errores de autenticación
+async function handleAuthError(error: any, operation: string) {
+  console.error(`❌ ${operation} - Auth error:`, error)
+  
+  // Si es un error de JWT/token, intentar refrescar
+  if (error.message?.includes('JWT') || error.message?.includes('expired') || error.message?.includes('invalid_token')) {
+    console.log('🔄 Attempting to refresh session due to auth error')
+    try {
+      const { error: refreshError } = await dataSupabase.auth.refreshSession()
+      if (refreshError) {
+        console.error('❌ Failed to refresh session:', refreshError)
+        throw new Error('Session expired, please login again')
+      }
+      console.log('✅ Session refreshed successfully')
+      return true // Indica que se debe reintentar la operación
+    } catch (refreshError) {
+      console.error('❌ Error during session refresh:', refreshError)
+      throw new Error('Authentication expired, please login again')
+    }
+  }
+  
+  throw error
+}
+
 export async function getProjects(): Promise<Project[]> {
   console.log('🔍 getProjects called, USE_REAL_DATA:', USE_REAL_DATA)
   
