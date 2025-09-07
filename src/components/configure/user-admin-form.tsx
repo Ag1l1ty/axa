@@ -1,9 +1,10 @@
 
 "use client";
 
-import { useState } from 'react';
-import { getProjects, MOCK_USERS, addUser, updateUser, deleteUser } from '@/lib/data';
-import type { User, Role } from '@/lib/types';
+import { useState, useEffect } from 'react';
+import { getProjects, getUsers, createUser, updateUser, deleteUser } from '@/lib/supabase-data';
+import { signUp } from '@/lib/auth';
+import type { User, Role, Project } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -33,14 +34,39 @@ import { CreateUserDialog } from './create-user-dialog';
 import { useToast } from '@/hooks/use-toast';
 
 export function UserAdminForm() {
-    const [users, setUsers] = useState(MOCK_USERS);
-    const projects = getProjects();
-    const { isManager } = useAuth();
+    const [users, setUsers] = useState<User[]>([]);
+    const [projects, setProjects] = useState<Project[]>([]);
+    const [loading, setLoading] = useState(true);
+    const { profile } = useAuth();
+    const isManager = profile?.role === 'Admin' || profile?.role === 'Portfolio Manager';
     const [isCreateUserDialogOpen, setCreateUserDialogOpen] = useState(false);
     const [userToEdit, setUserToEdit] = useState<User | null>(null);
     const [userToDelete, setUserToDelete] = useState<User | null>(null);
     const [isConfirmingDelete, setConfirmingDelete] = useState(false);
     const { toast } = useToast();
+
+    useEffect(() => {
+        async function loadData() {
+            try {
+                const [usersData, projectsData] = await Promise.all([
+                    getUsers(),
+                    getProjects()
+                ]);
+                setUsers(usersData);
+                setProjects(projectsData);
+            } catch (error) {
+                console.error('Error loading data:', error);
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "No se pudieron cargar los datos."
+                });
+            } finally {
+                setLoading(false);
+            }
+        }
+        loadData();
+    }, [toast]);
 
     const getUserProjectCount = (user: User) => {
         return user.assignedProjectIds?.length || 0;
@@ -56,41 +82,71 @@ export function UserAdminForm() {
         setConfirmingDelete(true);
     }
 
-    const handleConfirmDelete = () => {
+    const handleConfirmDelete = async () => {
         if (userToDelete) {
-            deleteUser(userToDelete.id);
-            setUsers(users.filter(u => u.id !== userToDelete.id)); // Correctly update the state
-            toast({
-                title: "Usuario Eliminado",
-                description: `El usuario ${userToDelete.firstName} ${userToDelete.lastName} ha sido eliminado.`,
-            });
+            const success = await deleteUser(userToDelete.id);
+            if (success) {
+                setUsers(users.filter(u => u.id !== userToDelete.id));
+                toast({
+                    title: "Usuario Eliminado",
+                    description: `El usuario ${userToDelete.firstName} ${userToDelete.lastName} ha sido eliminado.`,
+                });
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "No se pudo eliminar el usuario.",
+                });
+            }
         }
         setConfirmingDelete(false);
         setUserToDelete(null);
     }
 
 
-    const handleUserSubmit = (values: Omit<User, 'id'>, id?: string) => {
+    const handleUserSubmit = async (values: Omit<User, 'id'> & { password?: string }, id?: string) => {
         if (id) {
-            // Update existing user
-            const updatedUser = updateUser({ ...values, id });
-            setUsers(users.map(u => u.id === id ? updatedUser : u));
-            toast({
-                title: "Usuario Actualizado",
-                description: `Los datos de ${values.firstName} ${values.lastName} han sido actualizados.`,
-            });
+            // Update existing user - remove password from values for update
+            const { password, ...updateValues } = values;
+            const success = await updateUser(id, updateValues);
+            if (success) {
+                setUsers(users.map(u => u.id === id ? { ...u, ...updateValues } : u));
+                toast({
+                    title: "Usuario Actualizado",
+                    description: `Los datos de ${updateValues.firstName} ${updateValues.lastName} han sido actualizados.`,
+                });
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "No se pudo actualizar el usuario.",
+                });
+            }
         } else {
-            // Create new user
-            const newUser: User = {
-                ...values,
-                id: `USR-00${users.length + 1}`,
-            };
-            addUser(newUser);
-            setUsers(prevUsers => [...prevUsers, newUser]);
-            toast({
-                title: "Usuario Creado",
-                description: `El usuario ${newUser.firstName} ${newUser.lastName} ha sido creado con éxito.`,
-            });
+            // Create new user - password is required for new users
+            if (!values.password) {
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "La contraseña es requerida para nuevos usuarios.",
+                });
+                return;
+            }
+            
+            const newUser = await createUser(values as Omit<User, 'id'> & { password: string });
+            if (newUser) {
+                setUsers(prevUsers => [...prevUsers, newUser]);
+                toast({
+                    title: "Usuario Creado",
+                    description: `El usuario ${newUser.firstName} ${newUser.lastName} ha sido creado con éxito.`,
+                });
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "No se pudo crear el usuario.",
+                });
+            }
         }
         setCreateUserDialogOpen(false);
         setUserToEdit(null);

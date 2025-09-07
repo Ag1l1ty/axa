@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Button } from '../ui/button';
 import { ArrowRight, Calendar, Flag, Archive, Package, Bug, Clock, MoreVertical, Trash2 } from 'lucide-react';
 import { Draggable } from 'react-beautiful-dnd';
-import { format } from 'date-fns';
+import { formatDate, formatNumber } from '@/lib/date-utils';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import {
@@ -68,11 +68,11 @@ export function KanbanCard({ delivery, index, onArchive, onUpdateDelivery }: Kan
                         <CardContent className="p-3 pt-0 text-xs text-muted-foreground space-y-2">
                            <div className="flex items-center gap-2">
                              <Calendar className="w-3 h-3" />
-                             <span>{format(new Date(delivery.estimatedDate), "MMM dd, yyyy")}</span>
+                             <span>{formatDate(delivery.estimatedDate)}</span>
                            </div>
                             <div className="flex items-center gap-2">
                                 <Flag className="w-3 h-3" />
-                                <span>Budget: ${delivery.budget.toLocaleString()}</span>
+                                <span>Budget: ${formatNumber(delivery.budget)}</span>
                             </div>
                             {showTstFields && (
                                 <div className="space-y-2 pt-2 border-t mt-2">

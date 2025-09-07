@@ -1,10 +1,12 @@
 
 "use client"
 
+import { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 import type { Delivery, ProjectStage } from '@/lib/types';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from '../ui/chart';
 import { differenceInDays, format, parseISO, addDays } from 'date-fns';
+import { getStageTransitions, calculateBusinessDays } from '@/lib/supabase-data';
 
 interface DeliveryPlanChartProps {
     delivery: Delivery;
@@ -24,36 +26,92 @@ const chartConfig = {
 const STAGES: ProjectStage[] = ['Definición', 'Desarrollo Local', 'Ambiente DEV', 'Ambiente TST', 'Ambiente UAT', 'Soporte Productivo', 'Cerrado'];
 
 export function DeliveryPlanChart({ delivery }: DeliveryPlanChartProps) {
+    const [stageTransitions, setStageTransitions] = useState<Array<{stage: string, date: string}>>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const loadStageData = async () => {
+            try {
+                const transitions = await getStageTransitions(delivery.id);
+                setStageTransitions(transitions);
+                console.log('📋 Stage transitions loaded:', transitions);
+            } catch (error) {
+                console.error('Error loading stage transitions:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadStageData();
+    }, [delivery.id]);
+
+    if (loading) {
+        return (
+            <div className="min-h-[350px] w-full flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto mb-2"></div>
+                    <p className="text-sm">Cargando tendencias...</p>
+                </div>
+            </div>
+        );
+    }
+
     const startDate = parseISO(delivery.creationDate);
     const endDate = parseISO(delivery.estimatedDate);
     
-    const totalDays = differenceInDays(endDate, startDate);
-    const daysPerStage = totalDays > 0 ? totalDays / (STAGES.length -1) : 0;
+    // 1. Línea planificado: días laborales divididos entre 7 etapas
+    const totalBusinessDays = calculateBusinessDays(startDate, endDate);
+    const businessDaysPerStage = totalBusinessDays > 0 ? totalBusinessDays / STAGES.length : 0;
+    
+    console.log(`📊 Planning: ${totalBusinessDays} business days ÷ ${STAGES.length} stages = ${businessDaysPerStage} days/stage`);
 
     const plannedData = STAGES.map((stage, index) => {
-        const date = addDays(startDate, daysPerStage * index);
-        return { x: date.getTime(), y: index, stage, type: 'Planificado' };
+        // Distribuir días laborales acumulativamente
+        let businessDaysElapsed = businessDaysPerStage * index;
+        let currentDate = new Date(startDate);
+        
+        // Avanzar por días laborales (saltando fines de semana)
+        let dayCount = 0;
+        while (dayCount < businessDaysElapsed) {
+            currentDate.setDate(currentDate.getDate() + 1);
+            const dayOfWeek = currentDate.getDay();
+            if (dayOfWeek !== 0 && dayOfWeek !== 6) { // No es fin de semana
+                dayCount++;
+            }
+        }
+        
+        return { 
+            x: currentDate.getTime(), 
+            y: index, 
+            stage, 
+            type: 'Planificado',
+            days: Math.round(businessDaysElapsed)
+        };
     });
 
-    // Simulate real dates if not present
-    const realStageDates = delivery.stageDates || {};
-    const currentStageIndex = STAGES.indexOf(delivery.stage);
-
-    if (!realStageDates['Definición']) {
-        realStageDates['Definición'] = delivery.creationDate;
+    // 2. Línea real: basado en transiciones reales del kanban
+    const realData: Array<{x: number, y: number, stage: string, type: string, days: number}> = [];
+    
+    if (stageTransitions.length > 0) {
+        stageTransitions.forEach((transition, index) => {
+            const stageIndex = STAGES.indexOf(transition.stage);
+            if (stageIndex !== -1) {
+                const transitionDate = parseISO(transition.date);
+                const daysFromStart = index === 0 ? 0 : calculateBusinessDays(startDate, transitionDate);
+                
+                realData.push({
+                    x: transitionDate.getTime(),
+                    y: stageIndex,
+                    stage: transition.stage,
+                    type: 'Real',
+                    days: daysFromStart
+                });
+            }
+        });
     }
 
-    const realData = STAGES.map((stage, index) => {
-        if (index > currentStageIndex || !realStageDates[stage]) {
-            return null;
-        }
-        const date = parseISO(realStageDates[stage]!);
-        return { x: date.getTime(), y: index, stage, type: 'Real' };
-    }).filter(Boolean);
-
-    const allData = [...plannedData, ...realData].sort((a,b) => a!.x - b!.x);
-    const domainMin = Math.min(...allData.map(d => d!.x));
-    const domainMax = Math.max(...allData.map(d => d!.x), endDate.getTime());
+    const allData = [...plannedData, ...realData].sort((a, b) => a.x - b.x);
+    const domainMin = Math.min(...allData.map(d => d.x));
+    const domainMax = Math.max(...allData.map(d => d.x), endDate.getTime());
 
     return (
         <ChartContainer config={chartConfig} className="min-h-[350px] w-full">
@@ -93,10 +151,12 @@ export function DeliveryPlanChart({ delivery }: DeliveryPlanChartProps) {
                         formatter={(value, name, props) => {
                             const stageName = props.payload.stage;
                             const date = format(new Date(props.payload.x), 'MMM d, yyyy');
+                            const days = props.payload.days;
                             return (
                                 <div className="flex flex-col">
                                     <span className="font-semibold">{stageName}</span>
                                     <span className="text-xs text-muted-foreground">{name}: {date}</span>
+                                    <span className="text-xs text-muted-foreground">Días laborales: {days}</span>
                                 </div>
                             )
                         }}

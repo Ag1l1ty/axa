@@ -1,6 +1,9 @@
-import { RiskMonitoringForm } from "@/components/risk/risk-monitoring-form";
+"use client";
 
-export default function RiskMonitoringPage() {
+import { RiskMonitoringForm } from "@/components/risk/risk-monitoring-form";
+import { ProtectedRoute } from '@/components/auth/protected-route';
+
+function RiskMonitoringContent() {
     return (
         <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
             <div className="max-w-4xl mx-auto">
@@ -11,5 +14,13 @@ export default function RiskMonitoringPage() {
                 <RiskMonitoringForm />
             </div>
         </div>
+    );
+}
+
+export default function RiskMonitoringPage() {
+    return (
+        <ProtectedRoute requiredRole={['Admin', 'PM/SM', 'Portfolio Manager']}>
+            <RiskMonitoringContent />
+        </ProtectedRoute>
     );
 }

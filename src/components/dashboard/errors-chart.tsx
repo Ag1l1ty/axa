@@ -1,7 +1,8 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Line, LineChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts"
-import { aggregateMetrics } from "@/lib/data"
+import { aggregateRealMetrics } from "@/lib/supabase-data"
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import type { Project } from "@/lib/types";
 
@@ -17,7 +18,40 @@ interface ErrorsChartProps {
 }
 
 export function ErrorsChart({ projects }: ErrorsChartProps) {
-  const data = aggregateMetrics(projects);
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadChartData() {
+      try {
+        const chartData = await aggregateRealMetrics(projects)
+        setData(chartData)
+      } catch (error) {
+        console.error('Error loading error chart data:', error)
+        setData([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (projects.length > 0) {
+      loadChartData()
+    } else {
+      setData([])
+      setLoading(false)
+    }
+  }, [projects])
+
+  if (loading) {
+    return (
+      <div className="min-h-[200px] w-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto mb-2"></div>
+          <p className="text-sm">Cargando errores...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <ChartContainer config={chartConfig} className="min-h-[200px] w-full">

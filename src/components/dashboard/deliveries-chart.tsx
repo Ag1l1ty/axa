@@ -1,8 +1,9 @@
 
 "use client"
 
+import { useState, useEffect } from "react"
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from "recharts"
-import { aggregateMetrics } from "@/lib/data"
+import { aggregateRealMetrics } from "@/lib/supabase-data"
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import type { Project } from "@/lib/types";
 
@@ -22,7 +23,40 @@ interface DeliveriesChartProps {
 }
 
 export function DeliveriesChart({ projects }: DeliveriesChartProps) {
-  const data = aggregateMetrics(projects);
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadChartData() {
+      try {
+        const chartData = await aggregateRealMetrics(projects)
+        setData(chartData)
+      } catch (error) {
+        console.error('Error loading chart data:', error)
+        setData([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (projects.length > 0) {
+      loadChartData()
+    } else {
+      setData([])
+      setLoading(false)
+    }
+  }, [projects])
+
+  if (loading) {
+    return (
+      <div className="min-h-[300px] w-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p>Cargando gráfico...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <ChartContainer config={chartConfig} className="min-h-[300px] w-full">

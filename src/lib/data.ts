@@ -1,5 +1,4 @@
 
-
 import type { Project, ProjectStage, Delivery, RiskLevel, RiskResult, Role, User, RiskProfile } from './types';
 import { subDays, addDays, getMonth, getYear, differenceInMonths, startOfMonth, parseISO, format } from 'date-fns';
 
@@ -403,6 +402,7 @@ let MOCK_RISK_PROFILES: RiskProfile[] = [
     { classification: 'Moderado', score: '6 - 9', deviation: '+40%' },
     { classification: 'Conservador', score: '3 - 5', deviation: '+20%' },
     { classification: 'Muy conservador', score: '1 - 2', deviation: '+10%' },
+    { classification: 'No Assessment', score: '0', deviation: 'N/A' },
 ];
 
 export function getRiskProfiles(): RiskProfile[] {

@@ -23,7 +23,8 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { AlertCircle, CheckCircle, Shield, TrendingUp } from 'lucide-react';
-import { getProjects, getProjectById, getRiskProfile, updateProjectRisk } from '@/lib/data';
+import { getProjects, updateProject } from '@/lib/supabase-data';
+import { getProjectById, getRiskProfile, updateProjectRisk } from '@/lib/data';
 import type { Project, RiskResult } from '@/lib/types';
 
 
@@ -45,7 +46,11 @@ export function RiskAssessmentForm() {
     const [isUpdate, setIsUpdate] = useState(false);
 
     useEffect(() => {
-        setProjects(getProjects());
+        async function loadProjects() {
+            const projectsData = await getProjects();
+            setProjects(projectsData);
+        }
+        loadProjects();
     }, []);
 
     const form = useForm<z.infer<typeof formSchema>>({
@@ -64,8 +69,8 @@ export function RiskAssessmentForm() {
     const projectId = form.watch('projectId');
 
     useEffect(() => {
-        if (projectId) {
-            const project = getProjectById(projectId);
+        if (projectId && projects.length > 0) {
+            const project = projects.find(p => p.id === projectId);
             if(project) {
                 setSelectedProject(project);
                 if (project.riskScore !== undefined && project.riskScore > 0) {
@@ -78,10 +83,10 @@ export function RiskAssessmentForm() {
             setSelectedProject(null);
             setIsUpdate(false);
         }
-    }, [projectId]);
+    }, [projectId, projects]);
 
 
-    function onSubmit(values: z.infer<typeof formSchema>) {
+    async function onSubmit(values: z.infer<typeof formSchema>) {
         let score = 0;
         
         // teamExperience scoring
@@ -110,9 +115,32 @@ export function RiskAssessmentForm() {
         
         const riskProfile = getRiskProfile(score);
         
-        updateProjectRisk(values.projectId, score, riskProfile.classification);
-        setProjects(getProjects()); // Refresh projects data
-        setResult({ ...riskProfile, score });
+        try {
+            // Update project risk in Supabase
+            const updateSuccess = await updateProject(values.projectId, {
+                riskLevel: riskProfile.classification,
+                riskScore: score
+            });
+            
+            if (updateSuccess) {
+                console.log('✅ Risk assessment updated successfully in Supabase');
+                
+                // Update local project risk (for mock compatibility)
+                updateProjectRisk(values.projectId, score, riskProfile.classification);
+                
+                // Refresh projects data
+                const projectsData = await getProjects();
+                setProjects(projectsData);
+                
+                setResult({ ...riskProfile, score });
+            } else {
+                console.error('❌ Failed to update project risk in Supabase');
+                alert('Error al guardar la valoración de riesgo. Intente de nuevo.');
+            }
+        } catch (error) {
+            console.error('Error updating project risk:', error);
+            alert('Error al guardar la valoración de riesgo. Intente de nuevo.');
+        }
     }
     
     if (result) {

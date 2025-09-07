@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState } from 'react';
-import { getDeliveries, getProjects, addDelivery, updateDelivery, deleteDelivery } from '@/lib/data';
+import { useState, useEffect } from 'react';
+import { getDeliveries, getProjects, createDelivery, updateDelivery, deleteDelivery } from '@/lib/supabase-data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -59,10 +59,34 @@ const createDeliveryFormSchema = (deliveries: Delivery[], currentDeliveryId?: st
 
 
 export function DeliveryAdminForm() {
-    const [deliveries, setDeliveries] = useState(getDeliveries());
-    const [projects, setProjects] = useState(getProjects());
+    const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+    const [projects, setProjects] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
     const { isManager, isProjectManager } = useAuth();
     const { toast } = useToast();
+
+    useEffect(() => {
+        async function loadData() {
+            try {
+                const [deliveriesData, projectsData] = await Promise.all([
+                    getDeliveries(),
+                    getProjects()
+                ]);
+                setDeliveries(deliveriesData);
+                setProjects(projectsData);
+            } catch (error) {
+                console.error('Error loading data:', error);
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "No se pudieron cargar los datos."
+                });
+            } finally {
+                setLoading(false);
+            }
+        }
+        loadData();
+    }, [toast]);
     
     const [deliveryNumberFilter, setDeliveryNumberFilter] = useState('');
     const [projectFilter, setProjectFilter] = useState('all');
@@ -96,62 +120,109 @@ export function DeliveryAdminForm() {
         setConfirmingDelete(true);
     };
 
-    const handleConfirmDelete = () => {
+    const handleConfirmDelete = async () => {
         if (deliveryToDelete) {
-            deleteDelivery(deliveryToDelete.id);
-            setDeliveries(getDeliveries());
-            toast({
-                title: "Entrega Eliminada",
-                description: `La entrega #${deliveryToDelete.deliveryNumber} ha sido eliminada.`,
-            });
+            const success = await deleteDelivery(deliveryToDelete.id);
+            if (success) {
+                setDeliveries(deliveries.filter(d => d.id !== deliveryToDelete.id));
+                toast({
+                    title: "Entrega Eliminada",
+                    description: `La entrega #${deliveryToDelete.deliveryNumber} ha sido eliminada.`,
+                });
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "No se pudo eliminar la entrega.",
+                });
+            }
         }
         setConfirmingDelete(false);
         setDeliveryToDelete(null);
     };
 
-    const handleDeliverySubmit = (values: z.infer<ReturnType<typeof createDeliveryFormSchema>>, id?: string) => {
+    const handleDeliverySubmit = async (values: z.infer<ReturnType<typeof createDeliveryFormSchema>>, id?: string) => {
         const project = projects.find(p => p.id === values.projectId);
         if (!project) return;
 
         if (id) {
             // Update existing delivery
-            const originalDelivery = deliveries.find(d => d.id === id);
-            if (!originalDelivery) return;
-
-            const updatedDeliveryData = {
-                ...originalDelivery,
-                ...values,
+            const updateData = {
+                projectId: values.projectId,
                 projectName: project.name,
+                deliveryNumber: values.deliveryNumber,
+                budget: values.budget,
                 estimatedDate: values.estimatedDate.toISOString(),
+                stage: values.stage || 'Definición',
             };
-            const updated = updateDelivery(updatedDeliveryData);
-            setDeliveries(deliveries.map(d => (d.id === id ? updated : d)));
-            toast({
-                title: "Entrega Actualizada",
-                description: `La entrega #${values.deliveryNumber} ha sido actualizada.`,
-            });
+            const success = await updateDelivery(id, updateData);
+            if (success) {
+                setDeliveries(deliveries.map(d => d.id === id ? { ...d, ...updateData } : d));
+                toast({
+                    title: "Entrega Actualizada",
+                    description: `La entrega #${values.deliveryNumber} ha sido actualizada.`,
+                });
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "No se pudo actualizar la entrega.",
+                });
+            }
         } else {
             // Create new delivery
-             const newDelivery: Delivery = {
-                id: `DLV-00${getDeliveries().length + 1}`,
+            const deliveryData: Omit<Delivery, 'id'> = {
                 projectId: project.id,
                 projectName: project.name,
                 deliveryNumber: values.deliveryNumber,
-                stage: 'Definición', // Default stage
+                stage: 'Definición',
                 budget: values.budget,
+                budgetSpent: 0,
                 estimatedDate: values.estimatedDate.toISOString(),
                 creationDate: new Date().toISOString(),
                 owner: project.owner,
+                isArchived: false,
+                riskAssessed: false,
+                errorCount: 0,
             };
-            addDelivery(newDelivery);
-            setDeliveries(getDeliveries());
-            toast({
-                title: "Entrega Creada",
-                description: `La entrega para el proyecto "${project.name}" ha sido creada.`,
-            });
+            const newDelivery = await createDelivery(deliveryData);
+            if (newDelivery) {
+                setDeliveries(prevDeliveries => [...prevDeliveries, newDelivery]);
+                toast({
+                    title: "Entrega Creada",
+                    description: `La entrega para el proyecto "${project.name}" ha sido creada.`,
+                });
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "No se pudo crear la entrega.",
+                });
+            }
         }
         handleDialogClose();
     };
+
+    if (loading) {
+        return (
+            <Card>
+                <CardHeader>
+                    <CardTitle>Entregas</CardTitle>
+                    <CardDescription>
+                        Administrar todas las tarjetas de entrega individuales en todos los proyectos.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-center justify-center py-8">
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                            <p>Cargando entregas...</p>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+        );
+    }
 
     return (
         <>

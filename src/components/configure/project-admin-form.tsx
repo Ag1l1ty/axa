@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState } from 'react';
-import { getProjects, addProject, updateProject, deleteProject, MOCK_USERS } from '@/lib/data';
+import { useState, useEffect } from 'react';
+import { getProjects, createProject, updateProject, deleteProject, getUsers } from '@/lib/supabase-data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -33,13 +33,37 @@ import { useToast } from '@/hooks/use-toast';
 
 export function ProjectAdminForm() {
     const { isManager, isProjectManager } = useAuth();
-    const [projects, setProjects] = useState(getProjects());
-    const [users, setUsers] = useState(MOCK_USERS);
+    const [projects, setProjects] = useState<Project[]>([]);
+    const [users, setUsers] = useState<User[]>([]);
+    const [loading, setLoading] = useState(true);
     const [isCreateProjectDialogOpen, setCreateProjectDialogOpen] = useState(false);
     const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
     const [isConfirmingDelete, setConfirmingDelete] = useState(false);
     const { toast } = useToast();
+
+    useEffect(() => {
+        async function loadData() {
+            try {
+                const [projectsData, usersData] = await Promise.all([
+                    getProjects(),
+                    getUsers()
+                ]);
+                setProjects(projectsData);
+                setUsers(usersData);
+            } catch (error) {
+                console.error('Error loading data:', error);
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "No se pudieron cargar los datos."
+                });
+            } finally {
+                setLoading(false);
+            }
+        }
+        loadData();
+    }, [toast]);
 
     const getProjectProgress = (project: Project) => {
         if (project.stage === 'Cerrado') {
@@ -51,7 +75,7 @@ export function ProjectAdminForm() {
         return (closedDeliveries / totalDeliveries) * 100;
     }
 
-    const handleProjectSubmit = (values: Omit<Project, 'id' | 'owner' | 'metrics' | 'riskLevel' | 'stage' | 'budgetSpent'> & { ownerId: string }, id?: string) => {
+    const handleProjectSubmit = async (values: Omit<Project, 'id' | 'owner' | 'metrics' | 'riskLevel' | 'stage' | 'budgetSpent'> & { ownerId: string }, id?: string) => {
         
         const owner = users.find(u => u.id === values.ownerId);
         if (!owner) return;
@@ -60,27 +84,29 @@ export function ProjectAdminForm() {
 
         if (id) {
             // Update existing project
-            const originalProject = projects.find(p => p.id === id);
-            if (!originalProject) return;
-
-            const updatedProjectData: Project = {
-                ...originalProject,
+            const updateData: Partial<Project> = {
                 ...values,
-                budget: values.budget,
                 startDate: values.startDate.toISOString(),
                 endDate: values.endDate.toISOString(),
                 owner: ownerData
             };
-            const updatedProject = updateProject(updatedProjectData);
-            setProjects(projects.map(p => p.id === id ? updatedProject : p));
-            toast({
-                title: "Proyecto Actualizado",
-                description: `Los datos del proyecto "${values.name}" han sido actualizados.`,
-            });
+            const success = await updateProject(id, updateData);
+            if (success) {
+                setProjects(projects.map(p => p.id === id ? { ...p, ...updateData } : p));
+                toast({
+                    title: "Proyecto Actualizado",
+                    description: `Los datos del proyecto "${values.name}" han sido actualizados.`,
+                });
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "No se pudo actualizar el proyecto.",
+                });
+            }
         } else {
             // Create new project
-            const newProject: Project = {
-                id: `PRJ-00${getProjects().length + 1}`,
+            const projectData: Omit<Project, 'id' | 'metrics'> = {
                 name: values.name,
                 description: values.description,
                 projectedDeliveries: values.projectedDeliveries,
@@ -88,17 +114,24 @@ export function ProjectAdminForm() {
                 startDate: values.startDate.toISOString(),
                 endDate: values.endDate.toISOString(),
                 stage: 'Definición',
-                riskLevel: 'No Assessment', // Default risk level
+                riskLevel: 'No Assessment',
                 budgetSpent: 0,
                 owner: ownerData,
-                metrics: [],
             };
-            addProject(newProject);
-            setProjects(getProjects());
-             toast({
-                title: "Proyecto Creado",
-                description: `El proyecto "${newProject.name}" ha sido creado con éxito.`,
-            });
+            const newProject = await createProject(projectData);
+            if (newProject) {
+                setProjects(prevProjects => [...prevProjects, newProject]);
+                toast({
+                    title: "Proyecto Creado",
+                    description: `El proyecto "${newProject.name}" ha sido creado con éxito.`,
+                });
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "No se pudo crear el proyecto.",
+                });
+            }
         }
        handleDialogClose();
     };
@@ -113,14 +146,22 @@ export function ProjectAdminForm() {
         setConfirmingDelete(true);
     };
     
-    const handleConfirmDelete = () => {
+    const handleConfirmDelete = async () => {
         if (projectToDelete) {
-            deleteProject(projectToDelete.id);
-            setProjects(getProjects());
-            toast({
-                title: "Proyecto Eliminado",
-                description: `El proyecto "${projectToDelete.name}" ha sido eliminado.`,
-            });
+            const success = await deleteProject(projectToDelete.id);
+            if (success) {
+                setProjects(projects.filter(p => p.id !== projectToDelete.id));
+                toast({
+                    title: "Proyecto Eliminado",
+                    description: `El proyecto "${projectToDelete.name}" ha sido eliminado.`,
+                });
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "No se pudo eliminar el proyecto.",
+                });
+            }
         }
         setConfirmingDelete(false);
         setProjectToDelete(null);
@@ -131,6 +172,27 @@ export function ProjectAdminForm() {
         setProjectToEdit(null);
     }
 
+
+    if (loading) {
+        return (
+            <Card>
+                <CardHeader>
+                    <CardTitle>Proyectos</CardTitle>
+                    <CardDescription>
+                        Agregue, edite o elimine proyectos del portafolio.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-center justify-center py-8">
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                            <p>Cargando proyectos...</p>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+        );
+    }
 
     return (
         <>

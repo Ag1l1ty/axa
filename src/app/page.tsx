@@ -1,25 +1,51 @@
 
 "use client"
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { DeliveriesChart } from "@/components/dashboard/deliveries-chart";
 import { ErrorsChart } from "@/components/dashboard/errors-chart";
 import { BudgetChart } from "@/components/dashboard/budget-chart";
-import { getProjects, getDashboardKpis, getRiskProfile } from "@/lib/data";
+import { getProjects, getDeliveries, getDashboardKpis } from "@/lib/supabase-data";
+import { getRiskProfile } from "@/lib/data";
 import { DollarSign, TrendingUp, AlertTriangle, CheckCircle, Package, Maximize } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { Project } from '@/lib/types';
+import type { Project, Delivery } from '@/lib/types';
 import { TimeErrorTrendsChart } from '@/components/dashboard/time-error-trends-chart';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ProtectedRoute } from '@/components/auth/protected-route';
+import { formatNumber } from '@/lib/date-utils';
 
 
-export default function DashboardPage() {
-  const allProjects = getProjects();
+function DashboardContent() {
+  const [allProjects, setAllProjects] = useState<Project[]>([]);
+  const [allDeliveries, setAllDeliveries] = useState<Delivery[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState('all');
   const [fullscreenChart, setFullscreenChart] = useState<{ title: string; chart: React.ReactNode } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [kpis, setKpis] = useState({ totalBudget: 0, onTrackProjects: 0, highRiskProjects: 0, totalDeliveries: 0 });
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [projects, deliveries] = await Promise.all([
+          getProjects(),
+          getDeliveries()
+        ]);
+        setAllProjects(projects);
+        setAllDeliveries(deliveries);
+        const dashboardKpis = await getDashboardKpis(projects);
+        setKpis(dashboardKpis);
+      } catch (error) {
+        console.error('Error loading dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
 
 
   const handleProjectChange = (projectId: string) => {
@@ -30,7 +56,16 @@ export default function DashboardPage() {
     ? allProjects
     : allProjects.filter(p => p.id === selectedProjectId);
 
-  const kpis = getDashboardKpis(allProjects);
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p>Cargando datos...</p>
+        </div>
+      </div>
+    );
+  }
   
   const ChartDialog = ({ children, title }: { children: React.ReactNode, title: string }) => (
       <Dialog open={!!fullscreenChart} onOpenChange={(isOpen) => !isOpen && setFullscreenChart(null)}>
@@ -47,7 +82,8 @@ export default function DashboardPage() {
 
   if (selectedProjectId !== 'all' && projectsToDisplay.length > 0) {
     const project = projectsToDisplay[0];
-    const deliveriesMade = project.metrics.reduce((acc, m) => acc + m.deliveries, 0);
+    // Contar entregas reales con estado "Cerrado" para este proyecto
+    const deliveriesMade = allDeliveries.filter(d => d.projectId === project.id && d.stage === 'Cerrado').length;
     const totalPlanned = project.projectedDeliveries || 0;
     
     const hasRiskAssessment = project.riskScore !== undefined && project.riskScore > 0;
@@ -73,7 +109,7 @@ export default function DashboardPage() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
            <KpiCard
             title="Total Budget"
-            value={`$${project.budget.toLocaleString()}`}
+            value={`$${formatNumber(project.budget)}`}
             description={`Total allocated budget for this project`}
             icon={<DollarSign className="text-primary" />}
           />
@@ -252,6 +288,14 @@ export default function DashboardPage() {
       </div>
       <ChartDialog title="Chart" children={fullscreenChart} />
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <ProtectedRoute>
+      <DashboardContent />
+    </ProtectedRoute>
   );
 }
 

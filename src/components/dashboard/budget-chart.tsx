@@ -1,31 +1,67 @@
 "use client"
 
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts"
+import { useState, useEffect } from "react"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts"
 import type { Project } from "@/lib/types"
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
-import { aggregateMetrics } from "@/lib/data"
+import { aggregateBudgetMetrics } from "@/lib/supabase-data"
 
 interface BudgetChartProps {
   projects: Project[];
 }
 
 const chartConfig = {
-  budget: {
-    label: "Presupuesto Acumulado",
+  planned: {
+    label: "Presupuesto Planeado",
     color: "hsl(var(--chart-2))",
   },
-  spent: {
-    label: "Gasto Acumulado",
+  executed: {
+    label: "Presupuesto Ejecutado",
     color: "hsl(var(--chart-1))",
   },
 } satisfies ChartConfig
 
 export function BudgetChart({ projects }: BudgetChartProps) {
-  const chartData = aggregateMetrics(projects);
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadChartData() {
+      try {
+        console.log('🚀 Budget Chart: Loading data for', projects.length, 'projects')
+        const chartData = await aggregateBudgetMetrics(projects)
+        console.log('📊 Budget Chart: Received data:', chartData)
+        setData(chartData)
+      } catch (error) {
+        console.error('Error loading budget chart data:', error)
+        setData([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (projects.length > 0) {
+      loadChartData()
+    } else {
+      setData([])
+      setLoading(false)
+    }
+  }, [projects])
+
+  if (loading) {
+    return (
+      <div className="min-h-[200px] w-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto mb-2"></div>
+          <p className="text-sm">Cargando presupuesto...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <ChartContainer config={chartConfig} className="min-h-[200px] w-full">
-      <LineChart accessibilityLayer data={chartData}>
+      <BarChart accessibilityLayer data={data}>
          <CartesianGrid strokeDasharray="3 3" />
         <XAxis
           dataKey="name"
@@ -39,7 +75,7 @@ export function BudgetChart({ projects }: BudgetChartProps) {
           fontSize={12}
           tickLine={false}
           axisLine={false}
-          tickFormatter={(value) => `$${value / 1000}k`}
+          tickFormatter={(value) => `$${value / 1000000}M`}
         />
         <Tooltip
           content={<ChartTooltipContent formatter={(value) => `$${Number(value).toLocaleString()}`} />}
@@ -51,9 +87,20 @@ export function BudgetChart({ projects }: BudgetChartProps) {
                 paddingTop: "20px"
             }}
         />
-        <Line type="monotone" dataKey="cumulativeBudget" name="Presupuesto Acumulado" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} strokeDasharray="5 5" />
-        <Line type="monotone" dataKey="spent" name="Gasto Acumulado" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
-      </LineChart>
+        <Bar 
+          dataKey="planned" 
+          name="Presupuesto Planeado" 
+          fill="hsl(var(--chart-2))" 
+          opacity={0.8}
+          radius={[4, 4, 0, 0]}
+        />
+        <Bar 
+          dataKey="executed" 
+          name="Presupuesto Ejecutado" 
+          fill="hsl(var(--chart-1))" 
+          radius={[4, 4, 0, 0]}
+        />
+      </BarChart>
     </ChartContainer>
   )
 }

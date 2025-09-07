@@ -1,6 +1,9 @@
-import { RiskAssessmentForm } from "@/components/risk/risk-assessment-form";
+"use client";
 
-export default function RiskAssessmentPage() {
+import { RiskAssessmentForm } from "@/components/risk/risk-assessment-form";
+import { ProtectedRoute } from '@/components/auth/protected-route';
+
+function RiskAssessmentContent() {
     return (
         <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
             <div className="max-w-4xl mx-auto">
@@ -11,5 +14,13 @@ export default function RiskAssessmentPage() {
                 <RiskAssessmentForm />
             </div>
         </div>
+    );
+}
+
+export default function RiskAssessmentPage() {
+    return (
+        <ProtectedRoute requiredRole={['Admin', 'PM/SM', 'Portfolio Manager']}>
+            <RiskAssessmentContent />
+        </ProtectedRoute>
     );
 }

@@ -1,7 +1,7 @@
 
 "use client"
 
-import { getDeliveryById, getProjectById } from "@/lib/data";
+import { getDeliveryById, getProjectById, updateDelivery, updateProject, getBudgetHistory, saveBudgetHistory } from "@/lib/supabase-data";
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { ProjectDetailCard } from "@/components/projects/project-detail-card";
@@ -25,10 +25,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import type { BudgetHistoryEntry, Delivery } from "@/lib/types";
+import type { BudgetHistoryEntry, Delivery, Project } from "@/lib/types";
 
 export default function DeliveryDetailsClientPage({ id }: { id: string }) {
     const [delivery, setDelivery] = useState<Delivery | null>(null);
+    const [project, setProject] = useState<Project | null>(null);
     const [budgetSpent, setBudgetSpent] = useState(0);
     const [formattedBudgetSpent, setFormattedBudgetSpent] = useState("0");
     const [budgetHistory, setBudgetHistory] = useState<BudgetHistoryEntry[]>([]);
@@ -39,29 +40,48 @@ export default function DeliveryDetailsClientPage({ id }: { id: string }) {
 
     useEffect(() => {
         setIsClient(true);
-        const deliveryData = getDeliveryById(id);
-        if (deliveryData) {
-            setDelivery(deliveryData);
-            const initialSpent = deliveryData.budgetSpent || 0;
-            setBudgetSpent(initialSpent);
-            setFormattedBudgetSpent(new Intl.NumberFormat('en-US').format(initialSpent));
-            setBudgetHistory(deliveryData.budgetHistory || []);
-        }
+        const loadDeliveryData = async () => {
+            try {
+                const deliveryData = await getDeliveryById(id);
+                if (deliveryData) {
+                    setDelivery(deliveryData);
+                    const initialSpent = deliveryData.budgetSpent || 0;
+                    setBudgetSpent(initialSpent);
+                    setFormattedBudgetSpent(new Intl.NumberFormat('en-US').format(initialSpent));
+                    
+                    // Cargar historial real desde Supabase
+                    const history = await getBudgetHistory(id);
+                    setBudgetHistory(history);
+                    console.log('📊 Budget history loaded:', history);
+                }
+            } catch (error) {
+                console.error('Error loading delivery data:', error);
+            }
+        };
+        loadDeliveryData();
     }, [id]);
 
 
-    if (!delivery) {
-        // You can render a loading state here
+    useEffect(() => {
+        const loadProjectData = async () => {
+            if (delivery) {
+                try {
+                    const projectData = await getProjectById(delivery.projectId);
+                    setProject(projectData);
+                } catch (error) {
+                    console.error('Error loading project data:', error);
+                }
+            }
+        };
+        loadProjectData();
+    }, [delivery]);
+
+    if (!delivery || !project) {
         return <div>Loading...</div>;
-    }
-    
-    const project = getProjectById(delivery.projectId);
-    if (!project) {
-        notFound();
     }
 
     const totalDeliveries = project.projectedDeliveries || 0;
-    const deliveriesMade = project.metrics.reduce((acc, m) => acc + m.deliveries, 0);
+    const currentDeliveryNumber = delivery.deliveryNumber;
 
     const lastUpdate = delivery.lastBudgetUpdate ? new Date(delivery.lastBudgetUpdate) : null;
     const needsUpdate = lastUpdate ? differenceInDays(new Date(), lastUpdate) > 7 : true;
@@ -72,19 +92,82 @@ export default function DeliveryDetailsClientPage({ id }: { id: string }) {
         setConfirmingBudget(true);
     };
 
-    const handleConfirmBudgetUpdate = () => {
-        const newHistoryEntry: BudgetHistoryEntry = {
-            date: new Date().toISOString(),
-            amount: pendingBudget,
-        };
+    const handleConfirmBudgetUpdate = async () => {
+        try {
+            const updateDate = new Date().toISOString();
+            
+            // Actualizar el delivery en Supabase
+            const deliveryUpdateSuccess = await updateDelivery(delivery.id, {
+                budgetSpent: pendingBudget,
+                lastBudgetUpdate: updateDate
+            });
 
-        setBudgetHistory(prevHistory => [...prevHistory, newHistoryEntry]);
-        setBudgetSpent(pendingBudget); 
-        setShowUpdateWarning(false);
-        setConfirmingBudget(false);
-        
-        // In a real app, you would also save this updated history to the backend
-        // For now, it only updates local state
+            if (deliveryUpdateSuccess) {
+                // Guardar en el historial de presupuesto
+                const historySuccess = await saveBudgetHistory(delivery.id, pendingBudget, updateDate);
+                console.log('💾 Budget history saved:', historySuccess);
+
+                // Actualizar el estado local del delivery
+                const newHistoryEntry: BudgetHistoryEntry = {
+                    date: updateDate,
+                    amount: pendingBudget,
+                };
+
+                setBudgetHistory(prevHistory => [newHistoryEntry, ...prevHistory]);
+                setBudgetSpent(pendingBudget);
+                
+                // Calcular el nuevo budget_spent total del proyecto
+                const updatedProjectBudgetSpent = await calculateProjectBudgetSpent(delivery.projectId, delivery.id, pendingBudget);
+                
+                // Actualizar el proyecto en Supabase
+                const projectUpdateSuccess = await updateProject(project.id, {
+                    budgetSpent: updatedProjectBudgetSpent
+                });
+
+                if (projectUpdateSuccess) {
+                    // Actualizar el estado local del proyecto
+                    setProject(prev => prev ? { ...prev, budgetSpent: updatedProjectBudgetSpent } : null);
+                }
+
+                setShowUpdateWarning(false);
+                setConfirmingBudget(false);
+                
+                if (historySuccess) {
+                    console.log('✅ Budget updated and history saved successfully');
+                }
+            } else {
+                console.error('Error updating delivery budget');
+                alert('Error al actualizar el presupuesto. Intente de nuevo.');
+            }
+        } catch (error) {
+            console.error('Error in handleConfirmBudgetUpdate:', error);
+            alert('Error al actualizar el presupuesto. Intente de nuevo.');
+        }
+    }
+
+    const calculateProjectBudgetSpent = async (projectId: string, currentDeliveryId: string, newBudgetSpent: number): Promise<number> => {
+        try {
+            // Obtener todos los deliveries del proyecto desde Supabase
+            const { getDeliveries } = await import("@/lib/supabase-data");
+            const allDeliveries = await getDeliveries();
+            
+            // Filtrar solo los deliveries de este proyecto
+            const projectDeliveries = allDeliveries.filter(d => d.projectId === projectId);
+            
+            // Sumar todos los budget_spent, usando el nuevo valor para el delivery actual
+            const totalSpent = projectDeliveries.reduce((total, delivery) => {
+                if (delivery.id === currentDeliveryId) {
+                    return total + newBudgetSpent;
+                } else {
+                    return total + (delivery.budgetSpent || 0);
+                }
+            }, 0);
+            
+            return totalSpent;
+        } catch (error) {
+            console.error('Error calculating project budget spent:', error);
+            return 0;
+        }
     }
     
     const handleBudgetInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -121,7 +204,7 @@ export default function DeliveryDetailsClientPage({ id }: { id: string }) {
                     <ProjectDetailCard title="Status" value={delivery.stage} icon={<Target />} />
                     <ProjectDetailCard title="Budget estimado delivery" value={`$${delivery.budget.toLocaleString()}`} icon={<DollarSign />} />
                     <ProjectDetailCard title="Fecha entrega planeada" value={new Date(delivery.estimatedDate).toLocaleDateString()} icon={<Calendar />} />
-                    <ProjectDetailCard title="Deliveries" value={`${deliveriesMade} / ${totalDeliveries}`} icon={<Package />} />
+                    <ProjectDetailCard title="Deliveries" value={`${currentDeliveryNumber} / ${totalDeliveries}`} icon={<Package />} />
                 </div>
 
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

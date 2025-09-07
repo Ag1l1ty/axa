@@ -21,7 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getProjects, getProjectById, getRiskProfile, getDeliveriesByProjectId, updateProjectRisk } from '@/lib/data';
+import { getProjects, getDeliveries, updateProject, updateDeliveryRiskAssessment } from '@/lib/supabase-data';
+import { getProjectById, getRiskProfile, updateProjectRisk } from '@/lib/data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { ArrowDown, ArrowUp, Minus } from 'lucide-react';
 import { Input } from '../ui/input';
@@ -65,9 +66,15 @@ export function RiskMonitoringForm() {
     const [deliveries, setDeliveries] = useState<Delivery[]>([]);
     const [result, setResult] = useState<UpdateResult | null>(null);
     const [initialProject, setInitialProject] = useState<Project | null>(null);
+    const [errorMessage, setErrorMessage] = useState<string>('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
-        setProjects(getProjects());
+        async function loadProjects() {
+            const projectsData = await getProjects();
+            setProjects(projectsData);
+        }
+        loadProjects();
     }, []);
 
     const form = useForm<z.infer<typeof formSchema>>({
@@ -87,21 +94,44 @@ export function RiskMonitoringForm() {
     const selectedDeliveryId = form.watch('deliveryId');
 
     useEffect(() => {
-        if (selectedProjectId) {
-            setDeliveries(getDeliveriesByProjectId(selectedProjectId));
-            setInitialProject(getProjectById(selectedProjectId) || null);
-            form.setValue('deliveryId', '');
-        } else {
-            setDeliveries([]);
-            setInitialProject(null);
+        async function loadDeliveries() {
+            if (selectedProjectId) {
+                // Load all deliveries and filter by project ID
+                const allDeliveries = await getDeliveries();
+                const projectDeliveries = allDeliveries.filter(d => d.projectId === selectedProjectId);
+                setDeliveries(projectDeliveries);
+                const project = projects.find(p => p.id === selectedProjectId);
+                setInitialProject(project || null);
+                form.setValue('deliveryId', '');
+            } else {
+                setDeliveries([]);
+                setInitialProject(null);
+            }
         }
-    }, [selectedProjectId, form]);
+        loadDeliveries();
+    }, [selectedProjectId, form, projects]);
 
-    function onSubmit(values: z.infer<typeof formSchema>) {
-        const project = getProjectById(values.projectId);
-        if (!project || typeof project.riskScore === 'undefined') return;
+    async function onSubmit(values: z.infer<typeof formSchema>) {
+        setIsSubmitting(true);
+        setErrorMessage('');
         
-        let newScore = project.riskScore;
+        const project = projects.find(p => p.id === values.projectId);
+        const delivery = deliveries.find(d => d.id === values.deliveryId);
+        
+        if (!project || !delivery) {
+            setErrorMessage('Project or delivery not found');
+            setIsSubmitting(false);
+            return;
+        }
+
+        // Verificar si la entrega ya fue valorada
+        if (delivery.riskAssessed) {
+            setErrorMessage('Esta entrega ya ha sido valorada y no puede ser valorada nuevamente');
+            setIsSubmitting(false);
+            return;
+        }
+        
+        let newScore = project.riskScore || 10; // Default score if not set
 
         // Timeline deviation logic
         if (values.timelineDeviation && values.timelineDeviation >= 20) {
@@ -139,12 +169,33 @@ export function RiskMonitoringForm() {
         // Ensure score doesn't go above a maximum (e.g., 25)
         newScore = Math.min(newScore, 25);
         
-        const initialRiskProfile = getRiskProfile(project.riskScore);
+        const initialRiskProfile = getRiskProfile(project.riskScore || 10);
         const newRiskProfile = getRiskProfile(newScore);
         const newRiskClassification = newRiskProfile.classification;
         
+        // Use the new delivery risk assessment function
+        const updateResult = await updateDeliveryRiskAssessment(
+            values.deliveryId, 
+            newRiskClassification, 
+            newScore
+        );
+        
+        if (!updateResult.success) {
+            setErrorMessage(updateResult.message);
+            setIsSubmitting(false);
+            return;
+        }
+        
+        // Update local project risk (for mock compatibility)
         updateProjectRisk(values.projectId, newScore, newRiskClassification, values.deliveryId);
-        setProjects(getProjects());
+        
+        // Refresh projects and deliveries data
+        const [projectsData, deliveriesData] = await Promise.all([
+            getProjects(),
+            getDeliveries()
+        ]);
+        setProjects(projectsData);
+        setDeliveries(deliveriesData);
         
         const riskOrder: RiskLevel[] = ['Muy conservador', 'Conservador', 'Moderado', 'Moderado - alto', 'Agresivo', 'Muy Agresivo'];
         const initialIndex = riskOrder.indexOf(initialRiskProfile.classification);
@@ -156,11 +207,13 @@ export function RiskMonitoringForm() {
 
         setResult({ 
             initialRisk: project.riskLevel,
-            initialScore: project.riskScore,
+            initialScore: project.riskScore || 10,
             newRisk: newRiskClassification,
             newScore: newScore,
             change 
         });
+        
+        setIsSubmitting(false);
     }
 
     if (result && initialProject) {
@@ -316,7 +369,19 @@ export function RiskMonitoringForm() {
                     )}
                 />
 
-                <Button type="submit" disabled={!selectedDeliveryId}>Update Risk</Button>
+                {errorMessage && (
+                    <div className="text-sm text-destructive font-medium mt-4 p-3 bg-destructive/10 rounded-md border border-destructive/20">
+                        {errorMessage}
+                    </div>
+                )}
+                
+                <Button 
+                    type="submit" 
+                    disabled={!selectedDeliveryId || isSubmitting}
+                    className="w-full"
+                >
+                    {isSubmitting ? 'Processing...' : 'Update Risk Assessment'}
+                </Button>
             </form>
         </Form>
     );

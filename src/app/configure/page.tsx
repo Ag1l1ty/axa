@@ -1,12 +1,15 @@
 
+"use client";
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UserAdminForm } from "@/components/configure/user-admin-form";
 import { ProjectAdminForm } from "@/components/configure/project-admin-form";
 import { DeliveryAdminForm } from "@/components/configure/delivery-admin-form";
 import { RiskAdminForm } from "@/components/configure/risk-admin-form";
 import { Users, FolderKanban, Package, ShieldAlert } from "lucide-react";
+import { ProtectedRoute } from '@/components/auth/protected-route';
 
-export default function ConfigurePage() {
+function ConfigureContent() {
     return (
         <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
             <h2 className="text-3xl font-bold tracking-tight mb-4">Administración de la Herramienta</h2>
@@ -46,5 +49,13 @@ export default function ConfigurePage() {
                 </TabsContent>
             </Tabs>
         </div>
+    );
+}
+
+export default function ConfigurePage() {
+    return (
+        <ProtectedRoute requiredRole={['Admin', 'admin', 'Portfolio Manager']}>
+            <ConfigureContent />
+        </ProtectedRoute>
     );
 }

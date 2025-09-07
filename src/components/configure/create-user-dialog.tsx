@@ -44,9 +44,23 @@ const formSchema = z.object({
     firstName: z.string().min(2, "First name must be at least 2 characters."),
     lastName: z.string().min(2, "Last name must be at least 2 characters."),
     email: z.string().email("Please enter a valid email address."),
+    password: z.string().optional(),
+    confirmPassword: z.string().optional(),
     role: z.string().min(1, "Please select a role."),
     avatar: z.string().optional(),
     assignedProjectIds: z.array(z.string()).optional(),
+}).refine((data) => {
+    // Solo validar confirmación de contraseña si hay contraseña
+    if (data.password && data.password.length > 0) {
+        if (data.password.length < 6) {
+            return false;
+        }
+        return data.password === data.confirmPassword;
+    }
+    return true;
+}, {
+    message: "Password must be at least 6 characters and passwords must match",
+    path: ["confirmPassword"],
 });
 
 type CreateUserDialogProps = {
@@ -66,6 +80,8 @@ export function CreateUserDialog({ isOpen, onOpenChange, onUserSubmit, projects,
             firstName: "",
             lastName: "",
             email: "",
+            password: "",
+            confirmPassword: "",
             role: "",
             avatar: "",
             assignedProjectIds: [],
@@ -75,22 +91,26 @@ export function CreateUserDialog({ isOpen, onOpenChange, onUserSubmit, projects,
     useEffect(() => {
         if (isOpen) {
             if (user) {
-                // Edit mode
+                // Edit mode - no password required for editing
                 form.reset({
                     firstName: user.firstName,
                     lastName: user.lastName,
                     email: user.email,
+                    password: "",
+                    confirmPassword: "",
                     role: user.role,
                     avatar: user.avatar,
                     assignedProjectIds: user.assignedProjectIds || [],
                 });
                 setPreview(user.avatar || null);
             } else {
-                // Create mode
+                // Create mode - password required for new users
                 form.reset({
                     firstName: "",
                     lastName: "",
                     email: "",
+                    password: "",
+                    confirmPassword: "",
                     role: "",
                     avatar: "",
                     assignedProjectIds: [],
@@ -114,6 +134,15 @@ export function CreateUserDialog({ isOpen, onOpenChange, onUserSubmit, projects,
     };
 
     function onSubmit(values: z.infer<typeof formSchema>) {
+        // Para usuarios nuevos, la contraseña es obligatoria
+        if (!user && (!values.password || values.password.length === 0)) {
+            form.setError("password", {
+                type: "manual",
+                message: "Password is required for new users"
+            });
+            return;
+        }
+        
         onUserSubmit({ ...values, role: values.role as Role }, user?.id);
     }
     
@@ -179,6 +208,32 @@ export function CreateUserDialog({ isOpen, onOpenChange, onUserSubmit, projects,
                                     </FormItem>
                                 )}
                             />
+                            {!user && (
+                                <>
+                                    <FormField
+                                        control={form.control}
+                                        name="password"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Contraseña</FormLabel>
+                                                <FormControl><Input type="password" {...field} /></FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="confirmPassword"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Confirmar Contraseña</FormLabel>
+                                                <FormControl><Input type="password" {...field} /></FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </>
+                            )}
                             <FormField
                                 control={form.control}
                                 name="role"

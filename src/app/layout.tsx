@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Toaster } from '@/components/ui/toaster';
+import { AuthProvider } from '@/hooks/use-auth';
 
 export const metadata: Metadata = {
   title: 'AXA Portfolio Insights',
@@ -24,10 +25,12 @@ export default function RootLayout({
         />
       </head>
       <body className="font-body antialiased">
-        <AppLayout>
-          {children}
-        </AppLayout>
-        <Toaster />
+        <AuthProvider>
+          <AppLayout>
+            {children}
+          </AppLayout>
+          <Toaster />
+        </AuthProvider>
       </body>
     </html>
   );

@@ -5,6 +5,17 @@ export type RiskLevel = 'Muy conservador' | 'Conservador' | 'Moderado' | 'Modera
 
 export type Role = 'Admin' | 'PM/SM' | 'Viewer' | 'Portfolio Manager';
 
+export type AuthUser = {
+  id: string
+  email: string
+  user_metadata: {
+    firstName?: string
+    lastName?: string
+    role?: string
+    avatar?: string
+  }
+};
+
 export type User = {
     id: string;
     firstName: string;
@@ -38,6 +49,9 @@ export type Delivery = {
   };
   isArchived?: boolean;
   riskAssessed?: boolean;
+  riskLevel?: RiskLevel;
+  riskScore?: number;
+  riskAssessmentDate?: string;
   errorCount?: number;
   errorSolutionTime?: number;
   stageDates?: Partial<Record<ProjectStage, string>>;

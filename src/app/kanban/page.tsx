@@ -1,10 +1,10 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Project, RiskLevel, ProjectStage, Delivery, User } from '@/lib/types';
 import { KanbanBoard } from '@/components/kanban/kanban-board';
-import { addProject, getProjects, getDeliveries, addDelivery, updateDelivery, getProjectById, MOCK_USERS, updateProject } from '@/lib/data';
+import { createProject, getProjects, getDeliveries, createDelivery, updateDelivery, getUsers, updateProject, saveStageTransition } from '@/lib/supabase-data';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -63,20 +63,49 @@ const createDeliveryFormSchema = (deliveries: Delivery[], currentDeliveryId?: st
 });
 
 
-export default function KanbanPage() {
+import { ProtectedRoute } from '@/components/auth/protected-route';
+
+function KanbanContent() {
     const { isManager, isProjectManager } = useAuth();
-    const [projects, setProjects] = useState(getProjects());
-    const [users, setUsers] = useState(MOCK_USERS);
-    const [deliveries, setDeliveries] = useState(getDeliveries());
+    const { toast } = useToast();
+    const [projects, setProjects] = useState<Project[]>([]);
+    const [users, setUsers] = useState<User[]>([]);
+    const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        async function loadData() {
+            try {
+                const [projectsData, usersData, deliveriesData] = await Promise.all([
+                    getProjects(),
+                    getUsers(),
+                    getDeliveries()
+                ]);
+                setProjects(projectsData);
+                setUsers(usersData);
+                setDeliveries(deliveriesData);
+                setSelectedProjects(new Set(projectsData.map(p => p.id)));
+            } catch (error) {
+                console.error('Error loading data:', error);
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "No se pudieron cargar los datos."
+                });
+            } finally {
+                setLoading(false);
+            }
+        }
+        loadData();
+    }, [toast]);
     const [searchQuery, setSearchQuery] = useState('');
-    const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set(projects.map(p => p.id)));
+    const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
     const [isCreateProjectDialogOpen, setCreateProjectDialogOpen] = useState(false);
     const [isCreateDeliveryCardDialogOpen, setCreateDeliveryCardDialogOpen] = useState(false);
     const [isConfirmingMove, setConfirmingMove] = useState(false);
     const [pendingMove, setPendingMove] = useState<PendingMove>(null);
     const [isConfirmingArchive, setConfirmingArchive] = useState(false);
     const [deliveryToArchive, setDeliveryToArchive] = useState<string | null>(null);
-    const { toast } = useToast();
 
     const handleProjectToggle = (projectId: string) => {
         const newProjects = new Set(selectedProjects);
@@ -97,7 +126,7 @@ export default function KanbanPage() {
         return matchesSearch && matchesProject;
     });
 
-    const executeMove = (deliveryId: string, destination: DropResult['destination']) => {
+    const executeMove = async (deliveryId: string, destination: DropResult['destination']) => {
         if (!destination) return;
 
         const delivery = deliveries.find(d => d.id === deliveryId);
@@ -106,41 +135,40 @@ export default function KanbanPage() {
             const originalStage = delivery.stage;
             const newStage = destination.droppableId as ProjectStage;
             
-            const updatedDelivery: Delivery = { ...delivery, stage: newStage };
+            const updateData = { stage: newStage };
 
             if (newStage === 'Cerrado' && originalStage !== 'Cerrado') {
-                const project = getProjectById(delivery.projectId);
+                const project = projects.find(p => p.id === delivery.projectId);
                 if (project) {
-                    project.budgetSpent += delivery.budget;
+                    const newBudgetSpent = (project.budgetSpent || 0) + delivery.budget;
+                    await updateProject(project.id, { budgetSpent: newBudgetSpent });
                     
-                    const deliveryDate = new Date(); // Use current date for closing
-                    const monthName = format(deliveryDate, 'MMM');
-                    
-                    let metricIndex = project.metrics.findIndex(m => m.month === monthName);
-
-                    if (metricIndex > -1) {
-                        project.metrics[metricIndex].deliveries += 1;
-                        project.metrics[metricIndex].spent += delivery.budget;
-                        if(typeof delivery.errorCount === 'number') {
-                            project.metrics[metricIndex].errors += delivery.errorCount;
-                        }
-                    } else {
-                        // If no metric for this month, create one
-                        project.metrics.push({
-                            month: monthName,
-                            deliveries: 1,
-                            errors: delivery.errorCount || 0,
-                            budget: 0, // Budget is project-level, not added monthly here
-                            spent: delivery.budget,
-                            errorSolutionTime: delivery.errorSolutionTime
-                        });
-                    }
-                    updateProject(project); // Persist changes to the project
-                    setProjects(getProjects());
+                    // Update local state
+                    setProjects(prevProjects => 
+                        prevProjects.map(p => 
+                            p.id === project.id ? { ...p, budgetSpent: newBudgetSpent } : p
+                        )
+                    );
                 }
             }
-             updateDelivery(updatedDelivery);
-             setDeliveries(getDeliveries());
+            
+            const success = await updateDelivery(delivery.id, updateData);
+            if (success) {
+                // Save stage transition for the delivery plan chart
+                try {
+                    const transitionDate = new Date().toISOString();
+                    await saveStageTransition(delivery.id, originalStage, newStage, transitionDate);
+                    console.log(`✅ Stage transition saved: ${delivery.id} -> ${originalStage} to ${newStage} at ${transitionDate}`);
+                } catch (error) {
+                    console.error('Error saving stage transition:', error);
+                }
+                
+                setDeliveries(prevDeliveries => 
+                    prevDeliveries.map(d => 
+                        d.id === deliveryId ? { ...d, ...updateData } : d
+                    )
+                );
+            }
         }
     };
 
@@ -208,12 +236,15 @@ export default function KanbanPage() {
         setConfirmingArchive(true);
     };
 
-    const handleConfirmArchive = () => {
+    const handleConfirmArchive = async () => {
         if (deliveryToArchive) {
-            const delivery = deliveries.find(d => d.id === deliveryToArchive);
-            if(delivery) {
-                updateDelivery({ ...delivery, isArchived: true });
-                setDeliveries(getDeliveries());
+            const success = await updateDelivery(deliveryToArchive, { isArchived: true });
+            if (success) {
+                setDeliveries(prevDeliveries => 
+                    prevDeliveries.map(d => 
+                        d.id === deliveryToArchive ? { ...d, isArchived: true } : d
+                    )
+                );
             }
         }
         setConfirmingArchive(false);
@@ -225,20 +256,22 @@ export default function KanbanPage() {
         setDeliveryToArchive(null);
     };
 
-    const handleUpdateDelivery = (deliveryId: string, updatedFields: Partial<Delivery>) => {
-        const delivery = deliveries.find(d => d.id === deliveryId);
-        if (delivery) {
-            updateDelivery({ ...delivery, ...updatedFields });
-            setDeliveries(getDeliveries());
+    const handleUpdateDelivery = async (deliveryId: string, updatedFields: Partial<Delivery>) => {
+        const success = await updateDelivery(deliveryId, updatedFields);
+        if (success) {
+            setDeliveries(prevDeliveries => 
+                prevDeliveries.map(d => 
+                    d.id === deliveryId ? { ...d, ...updatedFields } : d
+                )
+            );
         }
     };
 
-    const handleProjectCreated = (newProjectData: Omit<Project, 'id' | 'metrics' | 'riskLevel' | 'stage' | 'budgetSpent'> & { ownerId: string }) => {
+    const handleProjectCreated = async (newProjectData: Omit<Project, 'id' | 'metrics' | 'riskLevel' | 'stage' | 'budgetSpent'> & { ownerId: string }) => {
         const owner = users.find(u => u.id === newProjectData.ownerId);
         if (!owner) return;
         
-        const newProject: Project = {
-            id: `PRJ-00${getProjects().length + 1}`,
+        const projectData: Omit<Project, 'id' | 'metrics'> = {
             name: newProjectData.name,
             description: newProjectData.description,
             budget: newProjectData.budget,
@@ -247,22 +280,29 @@ export default function KanbanPage() {
             riskLevel: 'No Assessment',
             budgetSpent: 0,
             owner: { id: owner.id, name: `${owner.firstName} ${owner.lastName}`, avatar: owner.avatar },
-            metrics: [],
             startDate: newProjectData.startDate.toISOString(),
             endDate: newProjectData.endDate.toISOString(),
         };
-        addProject(newProject);
-        const updatedProjects = getProjects();
-        setProjects(updatedProjects);
-        setSelectedProjects(new Set(updatedProjects.map(p => p.id)));
-        toast({
-            title: "Project Created",
-            description: `A new project "${newProject.name}" has been created.`,
-        });
+        
+        const newProject = await createProject(projectData);
+        if (newProject) {
+            setProjects(prevProjects => [...prevProjects, newProject]);
+            setSelectedProjects(prev => new Set([...prev, newProject.id]));
+            toast({
+                title: "Project Created",
+                description: `A new project "${newProject.name}" has been created.`,
+            });
+        } else {
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "No se pudo crear el proyecto.",
+            });
+        }
         setCreateProjectDialogOpen(false);
     };
     
-     const handleDeliverySubmit = (values: z.infer<ReturnType<typeof createDeliveryFormSchema>>, id?: string) => {
+     const handleDeliverySubmit = async (values: z.infer<ReturnType<typeof createDeliveryFormSchema>>, id?: string) => {
         const project = projects.find(p => p.id === values.projectId);
         if (!project) return;
 
@@ -270,27 +310,50 @@ export default function KanbanPage() {
            // This page doesn't handle updates, only creation.
            // Updates are handled in the admin page.
         } else {
-             const newDelivery: Delivery = {
-                id: `DLV-00${getDeliveries().length + 1}`,
+            const deliveryData: Omit<Delivery, 'id'> = {
                 projectId: project.id,
                 projectName: project.name,
                 deliveryNumber: values.deliveryNumber,
-                stage: 'Definición', // Default stage
+                stage: 'Definición',
                 budget: values.budget,
+                budgetSpent: 0,
                 estimatedDate: values.estimatedDate.toISOString(),
                 creationDate: new Date().toISOString(),
                 owner: project.owner,
+                isArchived: false,
+                riskAssessed: false,
+                errorCount: 0,
             };
-            addDelivery(newDelivery);
-            setDeliveries(getDeliveries());
-            toast({
-                title: "Delivery Card Created",
-                description: `A new delivery card for project "${project?.name}" has been created.`,
-            });
+            
+            const newDelivery = await createDelivery(deliveryData);
+            if (newDelivery) {
+                setDeliveries(prevDeliveries => [...prevDeliveries, newDelivery]);
+                toast({
+                    title: "Delivery Card Created",
+                    description: `A new delivery card for project "${project?.name}" has been created.`,
+                });
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "No se pudo crear la tarjeta de entrega.",
+                });
+            }
             setCreateDeliveryCardDialogOpen(false);
         }
     }
 
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-full">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                    <p>Cargando Kanban...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <DragDropContext onDragEnd={onDragEnd}>
@@ -397,6 +460,14 @@ export default function KanbanPage() {
                 </AlertDialogContent>
             </AlertDialog>
         </DragDropContext>
+    );
+}
+
+export default function KanbanPage() {
+    return (
+        <ProtectedRoute>
+            <KanbanContent />
+        </ProtectedRoute>
     );
 }
 
