@@ -1,28 +1,41 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dummy.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'dummy_key'
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'dummy_service_key'
 
-// Service key only available on server-side via API routes
+export const isSupabaseConfigured = supabaseUrl !== 'https://dummy.supabase.co' && supabaseAnonKey !== 'dummy_key'
+
+// Singleton pattern para evitar múltiples instancias
+let supabaseInstance: SupabaseClient | null = null
+let supabaseAdminInstance: SupabaseClient | null = null
 
 // Cliente Supabase normal para operaciones de usuario
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: !process.env.NEXT_PUBLIC_SUPABASE_AUTH_DISABLED,
-    autoRefreshToken: !process.env.NEXT_PUBLIC_SUPABASE_AUTH_DISABLED,
+export const supabase = (() => {
+  if (!supabaseInstance && isSupabaseConfigured) {
+    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+      }
+    })
   }
-})
+  return supabaseInstance
+})()
 
 // Cliente Supabase admin para crear usuarios sin auto-login
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
+export const supabaseAdmin = (() => {
+  if (!supabaseAdminInstance && isSupabaseConfigured) {
+    supabaseAdminInstance = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      }
+    })
   }
-})
-
-export const isSupabaseConfigured = supabaseUrl !== 'https://dummy.supabase.co' && supabaseAnonKey !== 'dummy_key'
+  return supabaseAdminInstance
+})()
 
 export type Database = {
   public: {

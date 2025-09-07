@@ -56,33 +56,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    // Obtener sesión inicial
-    getCurrentUser().then((user) => {
-      setUser(user)
-      if (user) {
-        getUserProfile(user.id).then((profile) => {
+    if (!supabase) {
+      console.error('Supabase client not initialized')
+      setLoading(false)
+      return
+    }
+
+    // Función para inicializar la sesión
+    const initializeAuth = async () => {
+      try {
+        // Obtener sesión inicial
+        const user = await getCurrentUser()
+        setUser(user)
+        
+        if (user) {
+          const profile = await getUserProfile(user.id)
           setProfile(profile)
-          setLoading(false)
-        }).catch((error) => {
-          console.error('useAuth: Error getting user profile:', error)
-          setLoading(false)
-        })
-      } else {
+        }
+        
+        setLoading(false)
+      } catch (error) {
+        console.error('useAuth: Error initializing auth:', error)
         setLoading(false)
       }
-    }).catch((error) => {
-      console.error('useAuth: Error getting current user:', error)
-      setLoading(false)
-    })
+    }
+
+    // Inicializar autenticación
+    initializeAuth()
 
     // Escuchar cambios de autenticación
-    const { data: { subscription } } = supabase!.auth.onAuthStateChange(
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('Auth state change:', event, session?.user?.email)
+        
         if (session?.user) {
           const authUser = session.user as AuthUser
           setUser(authUser)
-          const userProfile = await getUserProfile(authUser.id)
-          setProfile(userProfile)
+          try {
+            const userProfile = await getUserProfile(authUser.id)
+            setProfile(userProfile)
+          } catch (error) {
+            console.error('Error getting profile after auth change:', error)
+            setProfile(null)
+          }
         } else {
           setUser(null)
           setProfile(null)
@@ -91,7 +107,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [mounted])
 
   const handleSignOut = async () => {
