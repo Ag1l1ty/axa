@@ -66,27 +66,45 @@ export function DeliveryAdminForm() {
     const { toast } = useToast();
 
     useEffect(() => {
+        let isMounted = true;
+        
         async function loadData() {
+            console.log('🔄 DeliveryAdminForm: Starting loadData...');
             try {
                 const [deliveriesData, projectsData] = await Promise.all([
                     getDeliveries(),
                     getProjects()
                 ]);
-                setDeliveries(deliveriesData);
-                setProjects(projectsData);
-            } catch (error) {
-                console.error('Error loading data:', error);
-                toast({
-                    variant: "destructive",
-                    title: "Error",
-                    description: "No se pudieron cargar los datos."
+                
+                console.log('📊 DeliveryAdminForm: Data loaded', {
+                    deliveriesCount: deliveriesData?.length || 0,
+                    projectsCount: projectsData?.length || 0
                 });
-            } finally {
-                setLoading(false);
+                
+                if (isMounted) {
+                    setDeliveries(deliveriesData || []);
+                    setProjects(projectsData || []);
+                    setLoading(false);
+                }
+            } catch (error) {
+                console.error('❌ DeliveryAdminForm: Error loading data:', error);
+                if (isMounted) {
+                    toast({
+                        variant: "destructive",
+                        title: "Error",
+                        description: "No se pudieron cargar los datos."
+                    });
+                    setLoading(false);
+                }
             }
         }
+        
         loadData();
-    }, [toast]);
+        
+        return () => {
+            isMounted = false;
+        };
+    }, []); // Remover dependencia de toast para evitar loops
     
     const [deliveryNumberFilter, setDeliveryNumberFilter] = useState('');
     const [projectFilter, setProjectFilter] = useState('all');
