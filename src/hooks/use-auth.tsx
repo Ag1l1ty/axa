@@ -57,27 +57,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (!supabase) {
-      console.error('❌ Supabase client not initialized - falling back to mock auth')
-      // En lugar de fallar, usar mock auth temporalmente
-      const mockUser: AuthUser = {
-        id: 'temp-admin-id',
-        email: 'admin@agilitychanges.com',
-        user_metadata: {
-          firstName: 'Admin',
-          lastName: 'Principal', 
-          role: 'Admin'
-        }
-      }
-      const mockProfile: User = {
-        id: 'temp-admin-id',
-        firstName: 'Admin',
-        lastName: 'Principal',
-        email: 'admin@agilitychanges.com',
-        role: 'Admin',
-        avatar: '/avatars/admin.png'
-      }
-      setUser(mockUser)
-      setProfile(mockProfile)
+      console.error('❌ Supabase client not initialized')
+      setUser(null)
+      setProfile(null)
       setLoading(false)
       return
     }
@@ -110,24 +92,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.error('❌ useAuth: Error initializing auth:', error)
         
-        // En caso de error grave, resetear y usar fallback
+        // En caso de error grave, limpiar estado y redirigir
         if (error.message?.includes('Multiple GoTrueClient') || error.message?.includes('JWT')) {
-          console.log('🔄 Resetting client due to initialization error')
-          resetSupabaseClient()
+          console.log('🔄 Multiple client error detected - clearing state')
+          setUser(null)
+          setProfile(null)
           
-          // Intentar una vez más
-          try {
-            const user = await getCurrentUser()
-            setUser(user)
-            if (user) {
-              const profile = await getUserProfile(user.id)
-              setProfile(profile)
-            }
-          } catch (retryError) {
-            console.error('❌ Retry failed:', retryError)
-            setUser(null)
-            setProfile(null)
+          // Limpiar localStorage y forzar refresh
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('axa-supabase-auth-token')
+            console.log('🔄 Redirecting to login due to client error')
+            setTimeout(() => {
+              window.location.href = '/login'
+            }, 1000)
           }
+        } else {
+          // Para otros errores, simplemente limpiar estado
+          setUser(null)
+          setProfile(null)
         }
         
         setLoading(false)
@@ -250,14 +232,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [mounted, user, isSupabaseConfigured])
 
   const handleSignOut = async () => {
-    if (isSupabaseConfigured && supabase) {
-      console.log('👋 Signing out user...')
-      await supabase.auth.signOut()
-      resetSupabaseClient() // Limpiar cliente después del logout
+    console.log('👋 Starting logout process...')
+    
+    try {
+      // Primero limpiar el estado local
+      setUser(null)
+      setProfile(null)
+      setLoading(true)
+      
+      if (isSupabaseConfigured && supabase) {
+        console.log('🔄 Calling supabase.auth.signOut()...')
+        await supabase.auth.signOut()
+        console.log('✅ Supabase signOut completed')
+      }
+      
+      // Limpiar localStorage manualmente
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('axa-supabase-auth-token')
+        console.log('🧹 Cleared localStorage')
+      }
+      
+      // Forzar recarga de la página para limpiar completamente el estado
+      setTimeout(() => {
+        window.location.href = '/login'
+      }, 500)
+      
+    } catch (error) {
+      console.error('❌ Error during logout:', error)
+      // En caso de error, forzar limpieza y redirect
+      setUser(null)
+      setProfile(null)
+      if (typeof window !== 'undefined') {
+        localStorage.clear()
+        window.location.href = '/login'
+      }
     }
-    setUser(null)
-    setProfile(null)
-    setLoading(false)
   }
 
   const isManager = profile?.role === 'Admin' || profile?.role === 'Portfolio Manager'
