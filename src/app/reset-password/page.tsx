@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useAuth } from '@/hooks/use-auth'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -18,8 +19,16 @@ function ResetPasswordContent() {
   const [success, setSuccess] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { user, loading } = useAuth()
 
   useEffect(() => {
+    // Si el usuario ya está logueado, redirigir al dashboard
+    if (!loading && user) {
+      console.log('👤 User already authenticated, redirecting to dashboard')
+      router.push('/')
+      return
+    }
+
     // Verificar si hay un token de recuperación en la URL
     const error = searchParams?.get('error')
     const errorDescription = searchParams?.get('error_description')
@@ -27,7 +36,19 @@ function ResetPasswordContent() {
     if (error) {
       setError(errorDescription || 'Error en el enlace de recuperación')
     }
-  }, [searchParams])
+  }, [searchParams, user, loading, router])
+
+  // Mostrar loading mientras se verifica la autenticación
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-500" />
+          <p className="mt-2 text-sm text-gray-600">Verificando autenticación...</p>
+        </div>
+      </div>
+    )
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
