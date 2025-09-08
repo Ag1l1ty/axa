@@ -19,7 +19,7 @@ export async function testSupabaseConnection() {
   try {
     console.log('🔍 Testing Supabase connection...')
     
-    const { data, error } = await dataSupabase
+    const { data, error } = await getDataSupabase()
       .from('users')
       .select('count')
       .limit(1)
@@ -46,7 +46,7 @@ async function handleAuthError(error: any, operation: string) {
   if (error.message?.includes('JWT') || error.message?.includes('expired') || error.message?.includes('invalid_token')) {
     console.log('🔄 Attempting to refresh session due to auth error')
     try {
-      const { error: refreshError } = await dataSupabase.auth.refreshSession()
+      const { error: refreshError } = await getDataSupabase().auth.refreshSession()
       if (refreshError) {
         console.error('❌ Failed to refresh session:', refreshError)
         throw new Error('Session expired, please login again')
@@ -69,7 +69,7 @@ export async function getProjects(): Promise<Project[]> {
   
   try {
     // Verificar si el usuario está autenticado
-    const { data: { user }, error: authError } = await dataSupabase.auth.getUser()
+    const { data: { user }, error: authError } = await getDataSupabase().auth.getUser()
     
     if (authError || !user) {
       console.error('⛔ User not authenticated:', authError)
@@ -78,7 +78,7 @@ export async function getProjects(): Promise<Project[]> {
 
     console.log('✅ User authenticated, fetching ONLY real projects from Supabase')
 
-    const { data: projects, error } = await dataSupabase
+    const { data: projects, error } = await getDataSupabase()
       .from('projects')
       .select(`
         *,
@@ -139,7 +139,7 @@ export async function getProjectById(id: string): Promise<Project | null> {
     return getMockProjects().find(p => p.id === id) || null
   }
   try {
-    const { data: project, error } = await dataSupabase
+    const { data: project, error } = await getDataSupabase()
       .from('projects')
       .select(`
         *,
@@ -196,7 +196,7 @@ export async function getDeliveries(): Promise<Delivery[]> {
   
   try {
     // Verificar si el usuario está autenticado
-    const { data: { user }, error: authError } = await dataSupabase.auth.getUser()
+    const { data: { user }, error: authError } = await getDataSupabase().auth.getUser()
     
     if (authError || !user) {
       console.error('⛔ User not authenticated:', authError)
@@ -205,7 +205,7 @@ export async function getDeliveries(): Promise<Delivery[]> {
 
     console.log('✅ User authenticated, fetching ONLY real deliveries from Supabase')
 
-    const { data: deliveries, error } = await dataSupabase
+    const { data: deliveries, error } = await getDataSupabase()
       .from('deliveries')
       .select('*')
       .order('creation_date', { ascending: false })
@@ -266,7 +266,7 @@ export async function getDeliveryById(id: string): Promise<Delivery | null> {
   
   try {
     console.log('📤 Fetching delivery from Supabase:', id)
-    const { data: delivery, error } = await dataSupabase
+    const { data: delivery, error } = await getDataSupabase()
       .from('deliveries')
       .select('*')
       .eq('id', id)
@@ -324,7 +324,7 @@ export async function getUsers(): Promise<User[]> {
   
   try {
     // Verificar si el usuario está autenticado
-    const { data: { user }, error: authError } = await dataSupabase.auth.getUser()
+    const { data: { user }, error: authError } = await getDataSupabase().auth.getUser()
     
     if (authError || !user) {
       console.error('⛔ User not authenticated:', authError)
@@ -333,7 +333,7 @@ export async function getUsers(): Promise<User[]> {
 
     console.log('✅ User authenticated, fetching ONLY real users from Supabase')
     
-    const { data: users, error } = await dataSupabase
+    const { data: users, error } = await getDataSupabase()
       .from('users')
       .select('*')
 
@@ -381,7 +381,7 @@ export async function createProject(project: Omit<Project, 'id' | 'metrics'>): P
   try {
     const projectId = `PRJ-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     
-    const { data, error } = await dataSupabase
+    const { data, error } = await getDataSupabase()
     .from('projects')
     .insert({
       id: projectId,
@@ -463,7 +463,7 @@ export async function updateProject(id: string, updates: Partial<Project>): Prom
   }
 
   try {
-    const { error } = await dataSupabase
+    const { error } = await getDataSupabase()
       .from('projects')
       .update({
         ...(updates.name && { name: updates.name }),
@@ -503,7 +503,7 @@ export async function deleteProject(id: string): Promise<boolean> {
   }
 
   try {
-    const { error } = await dataSupabase
+    const { error } = await getDataSupabase()
       .from('projects')
       .delete()
       .eq('id', id)
@@ -527,7 +527,7 @@ export async function saveStageTransition(deliveryId: string, fromStage: string 
   }
   
   try {
-    const { error } = await dataSupabase
+    const { error } = await getDataSupabase()
       .from('stage_transitions')
       .insert({
         delivery_id: deliveryId,
@@ -560,7 +560,7 @@ export async function getStageTransitions(deliveryId: string): Promise<Array<{st
   }
   
   try {
-    const { data: transitions, error } = await dataSupabase
+    const { data: transitions, error } = await getDataSupabase()
       .from('stage_transitions')
       .select('to_stage, transition_date')
       .eq('delivery_id', deliveryId)
@@ -691,7 +691,7 @@ export async function createDelivery(delivery: Omit<Delivery, 'id'>): Promise<De
   try {
     const deliveryId = `DLV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     
-    const { data, error } = await dataSupabase
+    const { data, error } = await getDataSupabase()
       .from('deliveries')
       .insert({
         id: deliveryId,
@@ -774,7 +774,7 @@ export async function updateDelivery(id: string, updates: Partial<Delivery>): Pr
     console.log('📤 Sending to Supabase:', updateData)
     console.log('🎯 Target delivery ID:', id)
     
-    const { error, data } = await dataSupabase
+    const { error, data } = await getDataSupabase()
       .from('deliveries')
       .update(updateData)
       .eq('id', id)
@@ -802,7 +802,7 @@ export async function deleteDelivery(id: string): Promise<boolean> {
   }
 
   try {
-    const { error } = await dataSupabase
+    const { error } = await getDataSupabase()
       .from('deliveries')
       .delete()
       .eq('id', id)
@@ -897,7 +897,7 @@ export async function createUser(userData: Omit<User, 'id'> & { password: string
     await new Promise(resolve => setTimeout(resolve, 1000))
 
     // Verificar que el usuario se sincronizó en public.users
-    const { data: publicUser } = await dataSupabase
+    const { data: publicUser } = await getDataSupabase()
       .from('users')
       .select('*')
       .eq('id', newUser.id)
@@ -932,7 +932,7 @@ export async function updateUser(id: string, updates: Partial<User>): Promise<bo
   }
 
   try {
-    const { error } = await dataSupabase
+    const { error } = await getDataSupabase()
     .from('users')
     .update({
       ...(updates.firstName && { first_name: updates.firstName }),
@@ -1008,7 +1008,7 @@ export async function getDashboardKpis(projects: Project[]) {
   
   if (USE_REAL_DATA) {
     try {
-      const { data: deliveries } = await dataSupabase
+      const { data: deliveries } = await getDataSupabase()
         .from('deliveries')
         .select('*')
         .eq('stage', 'Cerrado')
@@ -1295,7 +1295,7 @@ export async function updateDeliveryRiskAssessment(
 
   try {
     // Primero verificar si la entrega ya fue valorada
-    const { data: currentDelivery, error: checkError } = await dataSupabase
+    const { data: currentDelivery, error: checkError } = await getDataSupabase()
       .from('deliveries')
       .select('id, risk_assessed')
       .eq('id', deliveryId)
@@ -1317,7 +1317,7 @@ export async function updateDeliveryRiskAssessment(
     }
 
     // Actualizar la valoración de riesgo en la base de datos
-    const { error: updateError } = await dataSupabase
+    const { error: updateError } = await getDataSupabase()
       .from('deliveries')
       .update({
         risk_assessed: true,
@@ -1335,7 +1335,7 @@ export async function updateDeliveryRiskAssessment(
     console.log('✅ Delivery risk assessment updated successfully')
 
     // Obtener información del proyecto para actualizar su assessment
-    const { data: delivery, error: deliveryError } = await dataSupabase
+    const { data: delivery, error: deliveryError } = await getDataSupabase()
       .from('deliveries')
       .select('project_id')
       .eq('id', deliveryId)
@@ -1372,7 +1372,7 @@ export async function updateProjectRiskAssessment(projectId: string): Promise<bo
 
   try {
     // Obtener todas las entregas valoradas del proyecto
-    const { data: assessedDeliveries, error: deliveriesError } = await dataSupabase
+    const { data: assessedDeliveries, error: deliveriesError } = await getDataSupabase()
       .from('deliveries')
       .select('risk_score, risk_level, budget')
       .eq('project_id', projectId)
@@ -1420,7 +1420,7 @@ export async function updateProjectRiskAssessment(projectId: string): Promise<bo
     else projectRiskLevel = 'Muy Agresivo'
 
     // Actualizar el proyecto con el nuevo assessment
-    const { error: updateError } = await dataSupabase
+    const { error: updateError } = await getDataSupabase()
       .from('projects')
       .update({
         risk_level: projectRiskLevel,
@@ -1455,7 +1455,7 @@ export async function getPendingRiskAssessmentDeliveries(): Promise<Delivery[]> 
 
   try {
     // Obtener solo las entregas que no han sido valoradas
-    const { data: deliveries, error } = await dataSupabase
+    const { data: deliveries, error } = await getDataSupabase()
       .from('deliveries')
       .select('*')
       .eq('risk_assessed', false)
