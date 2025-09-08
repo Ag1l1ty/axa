@@ -51,9 +51,18 @@ function ResetPasswordContent() {
       setError(updateError.message || 'Error al actualizar la contraseña')
       setIsLoading(false)
     } else {
+      setIsLoading(false)
       setSuccess(true)
+      console.log('✅ Password updated successfully, redirecting to login...')
+      
+      // Usar window.location como fallback para asegurar el redirect
       setTimeout(() => {
-        router.push('/login')
+        try {
+          router.push('/login')
+        } catch (routerError) {
+          console.warn('Router push failed, using window.location fallback')
+          window.location.href = '/login'
+        }
       }, 2000)
     }
   }
