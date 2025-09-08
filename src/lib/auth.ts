@@ -221,16 +221,36 @@ export async function updatePassword(password: string) {
   try {
     if (!supabase) throw new Error('Supabase client not available')
     
+    console.log('🔄 Attempting to update password...')
+    
+    // Verificar que hay una sesión activa
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    
+    if (sessionError) {
+      console.error('❌ Session error:', sessionError)
+      throw sessionError
+    }
+    
+    if (!session) {
+      console.error('❌ No active session found for password update')
+      throw new Error('No hay sesión activa. Por favor, solicita un nuevo enlace de recuperación.')
+    }
+    
+    console.log('✅ Active session found, proceeding with password update')
+    
     const { error } = await supabase.auth.updateUser({
       password
     })
 
     if (error) {
+      console.error('❌ Password update error:', error)
       throw error
     }
 
+    console.log('✅ Password updated successfully')
     return { error: null }
   } catch (error) {
+    console.error('❌ updatePassword function error:', error)
     return { error }
   }
 }

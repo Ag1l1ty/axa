@@ -253,9 +253,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       
       // Forzar recarga de la página para limpiar completamente el estado
+      console.log('🔄 Redirecting to login in 1 second...')
       setTimeout(() => {
+        console.log('🚀 Executing redirect to login')
         window.location.href = '/login'
-      }, 500)
+      }, 1000)
       
     } catch (error) {
       console.error('❌ Error during logout:', error)
