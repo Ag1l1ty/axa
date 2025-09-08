@@ -191,6 +191,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [mounted])
 
+  // Effect para renovación automática de sesión
+  useEffect(() => {
+    if (!mounted || !isSupabaseConfigured || !supabase || !user) return
+
+    let refreshTimer: NodeJS.Timeout | null = null
+
+    const setupSessionRefresh = () => {
+      // Limpiar timer existente
+      if (refreshTimer) {
+        clearTimeout(refreshTimer)
+      }
+
+      // Obtener la sesión actual
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.expires_at) {
+          const expiresAt = session.expires_at * 1000 // Convertir a millisegundos
+          const now = Date.now()
+          const timeUntilExpiry = expiresAt - now
+          
+          // Renovar 5 minutos antes de que expire (o inmediatamente si ya pasó)
+          const refreshIn = Math.max(timeUntilExpiry - 5 * 60 * 1000, 1000)
+          
+          console.log(`⏰ Session expires at: ${new Date(expiresAt).toLocaleString()}`)
+          console.log(`🔄 Will refresh session in: ${Math.round(refreshIn / 1000)} seconds`)
+          
+          refreshTimer = setTimeout(async () => {
+            try {
+              console.log('🔄 Auto-refreshing session...')
+              const { data, error } = await supabase.auth.refreshSession()
+              
+              if (error) {
+                console.error('❌ Failed to refresh session:', error)
+                // Si falla la renovación, cerrar sesión
+                console.log('🚪 Auto-logout due to failed session refresh')
+                await handleSignOut()
+              } else {
+                console.log('✅ Session refreshed successfully')
+                // Configurar el próximo refresh
+                setupSessionRefresh()
+              }
+            } catch (error) {
+              console.error('❌ Error during session refresh:', error)
+              await handleSignOut()
+            }
+          }, refreshIn)
+        }
+      })
+    }
+
+    setupSessionRefresh()
+
+    return () => {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer)
+      }
+    }
+  }, [mounted, user, isSupabaseConfigured])
+
   const handleSignOut = async () => {
     if (isSupabaseConfigured && supabase) {
       console.log('👋 Signing out user...')

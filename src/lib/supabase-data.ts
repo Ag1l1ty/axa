@@ -6,12 +6,35 @@ import type { Project, Delivery, User, ProjectStage, RiskLevel } from './types'
 const USE_REAL_DATA = true
 const NEVER_USE_MOCK = true
 
-// Helper function para obtener cliente consistente
+// Helper function para obtener cliente consistente con manejo de sesión
 const getDataSupabase = () => {
   if (!supabase) {
     throw new Error('Supabase client not available')
   }
   return supabase
+}
+
+// Helper para manejar errores de sesión expirada
+const handleSessionError = async (error: any) => {
+  if (error?.message?.includes('JWT') || error?.message?.includes('expired') || error?.code === 'PGRST301') {
+    console.log('🔄 Session expired, attempting refresh...')
+    try {
+      const { error: refreshError } = await supabase.auth.refreshSession()
+      if (refreshError) {
+        console.error('❌ Failed to refresh session:', refreshError)
+        // Redirigir al login si falla la renovación
+        window.location.href = '/login'
+        return false
+      }
+      console.log('✅ Session refreshed, you may retry the operation')
+      return true // Indica que se puede reintentar
+    } catch (refreshError) {
+      console.error('❌ Error refreshing session:', refreshError)
+      window.location.href = '/login'
+      return false
+    }
+  }
+  return false // No era un error de sesión
 }
 
 // Test de conexión a Supabase
