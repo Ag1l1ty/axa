@@ -66,8 +66,8 @@ export const getSupabaseClient = () => {
   return supabaseInstance
 }
 
-// Cliente Supabase normal para operaciones de usuario
-export const supabase = getSupabaseClient()
+// Cliente Supabase normal para operaciones de usuario - usar la función directamente
+export { getSupabaseClient as supabase }
 
 // Cliente Supabase admin (sin cambios)
 export const supabaseAdmin = (() => {

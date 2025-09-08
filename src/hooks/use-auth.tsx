@@ -56,9 +56,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    const supabase = getSupabaseClient()
+    const supabaseClient = getSupabaseClient()
     
-    if (!supabase) {
+    if (!supabaseClient) {
       console.error('❌ Supabase client not initialized - falling back to mock auth')
       // En lugar de fallar, usar mock auth temporalmente
       const mockUser: AuthUser = {
@@ -146,7 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initializeAuth()
 
     // Escuchar cambios de autenticación
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
       async (event, session) => {
         console.log('🔄 Auth state change:', event, session?.user?.email)
         console.log('📅 Session expires at:', session?.expires_at ? new Date(session.expires_at * 1000) : 'N/A')
@@ -200,10 +200,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [mounted])
 
   const handleSignOut = async () => {
-    const supabase = getSupabaseClient()
-    if (isSupabaseConfigured && supabase) {
+    const supabaseClient = getSupabaseClient()
+    if (isSupabaseConfigured && supabaseClient) {
       console.log('👋 Signing out user...')
-      await supabase.auth.signOut()
+      await supabaseClient.auth.signOut()
       resetSupabaseClient() // Limpiar cliente después del logout
     }
     setUser(null)
