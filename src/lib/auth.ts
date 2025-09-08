@@ -1,4 +1,4 @@
-import { supabase, supabaseAdmin, isSupabaseConfigured } from './supabase'
+import { getSupabaseClient, supabaseAdmin, isSupabaseConfigured } from './supabase'
 import { User, AuthUser } from './types'
 
 export async function signUp(email: string, password: string, userData: {
@@ -11,6 +11,9 @@ export async function signUp(email: string, password: string, userData: {
     console.log('🚀 Creating user in auth.users:', email)
     
     // 1. Crear usuario en auth.users
+    const supabase = getSupabaseClient()
+    if (!supabase) throw new Error('Supabase client not available')
+    
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -144,6 +147,9 @@ export async function signIn(email: string, password: string) {
     console.log('🔐 Using real Supabase auth for:', email)
     console.log('🌍 Supabase configured:', isSupabaseConfigured)
     
+    const supabase = getSupabaseClient()
+    if (!supabase) throw new Error('Supabase client not available')
+    
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password
@@ -180,6 +186,7 @@ export async function signIn(email: string, password: string) {
 
 export async function signOut() {
   try {
+    const supabase = getSupabaseClient()
     if (!isSupabaseConfigured || !supabase) {
       // En modo desarrollo, simular logout exitoso
       return { error: null }
@@ -197,6 +204,9 @@ export async function signOut() {
 
 export async function resetPassword(email: string) {
   try {
+    const supabase = getSupabaseClient()
+    if (!supabase) throw new Error('Supabase client not available')
+    
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`
     })
@@ -213,6 +223,9 @@ export async function resetPassword(email: string) {
 
 export async function updatePassword(password: string) {
   try {
+    const supabase = getSupabaseClient()
+    if (!supabase) throw new Error('Supabase client not available')
+    
     const { error } = await supabase.auth.updateUser({
       password
     })
@@ -228,6 +241,7 @@ export async function updatePassword(password: string) {
 }
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
+  const supabase = getSupabaseClient()
   if (!isSupabaseConfigured || !supabase) {
     return null
   }
@@ -242,6 +256,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 }
 
 export async function getUserProfile(userId: string): Promise<User | null> {
+  const supabase = getSupabaseClient()
   if (!isSupabaseConfigured || !supabase) {
     return null
   }

@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState } from 'react'
-import { supabase, isSupabaseConfigured } from '@/lib/supabase'
+import { getSupabaseClient, isSupabaseConfigured, resetSupabaseClient, forceSessionRefresh } from '@/lib/supabase'
 import { getCurrentUser, getUserProfile } from '@/lib/auth'
 import type { AuthUser, User } from '@/lib/types'
 
@@ -56,8 +56,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
+    const supabase = getSupabaseClient()
+    
     if (!supabase) {
-      console.error('Supabase client not initialized - falling back to mock auth')
+      console.error('❌ Supabase client not initialized - falling back to mock auth')
       // En lugar de fallar, usar mock auth temporalmente
       const mockUser: AuthUser = {
         id: 'temp-admin-id',
@@ -82,21 +84,60 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    // Función para inicializar la sesión
+    // Función para inicializar la sesión con retry
     const initializeAuth = async () => {
       try {
+        console.log('🔄 Initializing authentication...')
+        
         // Obtener sesión inicial
         const user = await getCurrentUser()
+        console.log('👤 Current user:', user?.email || 'none')
+        
         setUser(user)
         
         if (user) {
-          const profile = await getUserProfile(user.id)
-          setProfile(profile)
+          try {
+            const profile = await getUserProfile(user.id)
+            setProfile(profile)
+            console.log('✅ Profile loaded:', profile?.email)
+          } catch (profileError) {
+            console.error('❌ Profile loading error:', profileError)
+            // Si falla el profile, intentar refresh
+            const refreshed = await forceSessionRefresh()
+            if (refreshed) {
+              const retryProfile = await getUserProfile(user.id)
+              setProfile(retryProfile)
+            } else {
+              setProfile(null)
+            }
+          }
         }
         
         setLoading(false)
+        console.log('✅ Auth initialization complete')
       } catch (error) {
-        console.error('useAuth: Error initializing auth:', error)
+        console.error('❌ useAuth: Error initializing auth:', error)
+        
+        // En caso de error grave, resetear y usar fallback
+        if (error.message?.includes('Multiple GoTrueClient') || error.message?.includes('JWT')) {
+          console.log('🔄 Resetting client due to initialization error')
+          resetSupabaseClient()
+          
+          // Intentar una vez más
+          try {
+            const user = await getCurrentUser()
+            setUser(user)
+            if (user) {
+              const profile = await getUserProfile(user.id)
+              setProfile(profile)
+            }
+          } catch (retryError) {
+            console.error('❌ Retry failed:', retryError)
+            setUser(null)
+            setProfile(null)
+          }
+        }
+        
         setLoading(false)
       }
     }
@@ -159,11 +200,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [mounted])
 
   const handleSignOut = async () => {
+    const supabase = getSupabaseClient()
     if (isSupabaseConfigured && supabase) {
+      console.log('👋 Signing out user...')
       await supabase.auth.signOut()
+      resetSupabaseClient() // Limpiar cliente después del logout
     }
     setUser(null)
     setProfile(null)
+    setLoading(false)
   }
 
   const isManager = profile?.role === 'Admin' || profile?.role === 'Portfolio Manager'

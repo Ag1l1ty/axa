@@ -1,10 +1,19 @@
-import { supabase as dataSupabase, supabaseAdmin } from './supabase'
+import { getSupabaseClient, supabaseAdmin } from './supabase'
 import { getProjects as getMockProjects, getDeliveries as getMockDeliveries, MOCK_USERS } from './data'
 import type { Project, Delivery, User, ProjectStage, RiskLevel } from './types'
 
 // SOLO USAR DATOS REALES - NUNCA MOCK
 const USE_REAL_DATA = true
 const NEVER_USE_MOCK = true
+
+// Helper function para obtener cliente consistente
+const getDataSupabase = () => {
+  const client = getSupabaseClient()
+  if (!client) {
+    throw new Error('Supabase client not available')
+  }
+  return client
+}
 
 // Test de conexión a Supabase
 export async function testSupabaseConnection() {
