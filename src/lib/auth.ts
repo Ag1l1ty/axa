@@ -1,4 +1,4 @@
-import { getSupabaseClient, supabaseAdmin, isSupabaseConfigured } from './supabase'
+import { supabase, supabaseAdmin, isSupabaseConfigured } from './supabase'
 import { User, AuthUser } from './types'
 
 export async function signUp(email: string, password: string, userData: {

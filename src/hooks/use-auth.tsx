@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState } from 'react'
-import { getSupabaseClient, isSupabaseConfigured, resetSupabaseClient, forceSessionRefresh } from '@/lib/supabase'
+import { supabase, isSupabaseConfigured, resetSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser, getUserProfile } from '@/lib/auth'
 import type { AuthUser, User } from '@/lib/types'
 
@@ -56,9 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    const supabaseClient = getSupabaseClient()
-    
-    if (!supabaseClient) {
+    if (!supabase) {
       console.error('❌ Supabase client not initialized - falling back to mock auth')
       // En lugar de fallar, usar mock auth temporalmente
       const mockUser: AuthUser = {
@@ -103,13 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } catch (profileError) {
             console.error('❌ Profile loading error:', profileError)
             // Si falla el profile, intentar refresh
-            const refreshed = await forceSessionRefresh()
-            if (refreshed) {
-              const retryProfile = await getUserProfile(user.id)
-              setProfile(retryProfile)
-            } else {
-              setProfile(null)
-            }
+            setProfile(null)
           }
         }
         
@@ -146,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initializeAuth()
 
     // Escuchar cambios de autenticación
-    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('🔄 Auth state change:', event, session?.user?.email)
         console.log('📅 Session expires at:', session?.expires_at ? new Date(session.expires_at * 1000) : 'N/A')
@@ -200,10 +192,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [mounted])
 
   const handleSignOut = async () => {
-    const supabaseClient = getSupabaseClient()
-    if (isSupabaseConfigured && supabaseClient) {
+    if (isSupabaseConfigured && supabase) {
       console.log('👋 Signing out user...')
-      await supabaseClient.auth.signOut()
+      await supabase.auth.signOut()
       resetSupabaseClient() // Limpiar cliente después del logout
     }
     setUser(null)

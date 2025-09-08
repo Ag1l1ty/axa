@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dummy.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'dummy_key'
@@ -6,101 +6,32 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'dummy_servi
 
 export const isSupabaseConfigured = supabaseUrl !== 'https://dummy.supabase.co' && supabaseAnonKey !== 'dummy_key'
 
-// Mejor gestión de instancias con cleanup
-let supabaseInstance: SupabaseClient | null = null
-let supabaseAdminInstance: SupabaseClient | null = null
-let isInitialized = false
+// Crear cliente una sola vez - Simple y estable
+export const supabase = isSupabaseConfigured ? createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    storageKey: 'axa-supabase-auth-token'
+  }
+}) : null
 
-// Función para limpiar y reiniciar cliente
+// Cliente Supabase admin
+export const supabaseAdmin = isSupabaseConfigured ? createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+  }
+}) : null
+
+// Simple getter function para compatibilidad
+export const getSupabaseClient = () => supabase
+
+// Simple reset function
 export const resetSupabaseClient = () => {
-  console.log('🔄 Resetting Supabase client...')
-  if (supabaseInstance) {
-    // No hay método público de cleanup, pero podemos crear nueva instancia
-    supabaseInstance = null
-  }
-  isInitialized = false
-}
-
-// Función mejorada para obtener el cliente Supabase
-export const getSupabaseClient = () => {
-  if (!isSupabaseConfigured) {
-    console.warn('⚠️ Supabase not configured')
-    return null
-  }
-
-  if (!supabaseInstance || !isInitialized) {
-    console.log('🆕 Creating fresh Supabase client instance')
-    
-    // Crear nueva instancia con mejores configuraciones
-    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-        storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-        storageKey: 'axa-supabase-auth-token',
-        debug: process.env.NODE_ENV === 'development'
-      },
-      global: {
-        headers: {
-          'X-Client-Info': 'axa-portfolio-dashboard'
-        }
-      }
-    })
-    
-    isInitialized = true
-    
-    // Log para debugging
-    supabaseInstance.auth.onAuthStateChange((event, session) => {
-      console.log('🔐 Supabase Auth Event:', event)
-      if (event === 'TOKEN_REFRESHED') {
-        console.log('✅ Token refreshed at:', new Date().toISOString())
-      }
-      if (event === 'SIGNED_OUT') {
-        console.log('👋 User signed out, cleaning up...')
-        resetSupabaseClient()
-      }
-    })
-  }
-  
-  return supabaseInstance
-}
-
-// Cliente Supabase normal para operaciones de usuario - usar la función directamente
-export { getSupabaseClient as supabase }
-
-// Cliente Supabase admin (sin cambios)
-export const supabaseAdmin = (() => {
-  if (!supabaseAdminInstance && isSupabaseConfigured) {
-    supabaseAdminInstance = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      }
-    })
-  }
-  return supabaseAdminInstance
-})()
-
-// Función para forzar refresh de sesión
-export const forceSessionRefresh = async () => {
-  const client = getSupabaseClient()
-  if (client) {
-    console.log('🔄 Forcing session refresh...')
-    try {
-      const { data, error } = await client.auth.refreshSession()
-      if (error) {
-        console.error('❌ Force refresh failed:', error)
-        return false
-      }
-      console.log('✅ Force refresh successful')
-      return true
-    } catch (error) {
-      console.error('❌ Force refresh error:', error)
-      return false
-    }
-  }
-  return false
+  console.log('🔄 Supabase reset requested - will refresh page for clean state')
+  // En lugar de resetear, es más seguro refrescar la página para evitar problemas de estado
 }
 
 export type Database = {
