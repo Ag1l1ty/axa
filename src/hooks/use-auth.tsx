@@ -176,18 +176,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [mounted])
 
-  // Simplificado - sin auto-refresh que causa problemas
+  // Monitoreo de sesión con información detallada (autoRefresh maneja la renovación)
   useEffect(() => {
     if (!mounted || !isSupabaseConfigured || !supabase || !user) return
     
-    // Solo mostrar información de la sesión, sin refresh automático
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.expires_at) {
-        const expiresAt = session.expires_at * 1000
-        console.log(`⏰ Session expires at: ${new Date(expiresAt).toLocaleString()}`)
-        console.log(`⏱️ Session valid for: ${Math.round((expiresAt - Date.now()) / 1000 / 60)} minutes`)
-      }
-    })
+    const checkSession = () => {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.expires_at) {
+          const expiresAt = session.expires_at * 1000
+          const minutesLeft = Math.round((expiresAt - Date.now()) / 1000 / 60)
+          console.log(`⏰ Session expires at: ${new Date(expiresAt).toLocaleString()}`)
+          console.log(`⏱️ Session valid for: ${minutesLeft} minutes`)
+          
+          // Alertar si quedan menos de 10 minutos (para debug)
+          if (minutesLeft < 10 && minutesLeft > 0) {
+            console.warn(`⚠️ Session expires in ${minutesLeft} minutes - autoRefresh should handle this`)
+          }
+        } else {
+          console.log('⚠️ No session found')
+        }
+      })
+    }
+    
+    checkSession()
+    // Revisar sesión cada 5 minutos para monitoreo
+    const interval = setInterval(checkSession, 5 * 60 * 1000)
+    
+    return () => clearInterval(interval)
   }, [mounted, user, isSupabaseConfigured])
 
   const handleSignOut = async () => {
