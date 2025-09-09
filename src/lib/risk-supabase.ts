@@ -1,10 +1,7 @@
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from './supabase'
 
-// Cliente Supabase para operaciones de riesgo
-const supabaseUrl = 'https://gekizwnlxdywcfebycao.supabase.co'
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdla2l6d25seGR5d2NmZWJ5Y2FvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY4Nzc5ODksImV4cCI6MjA3MjQ1Mzk4OX0.5hqf9hFzwYgLtXKU7dS1EXrzrpAJSyx40VjKblN65KM'
-
-const riskSupabase = createClient(supabaseUrl, supabaseAnonKey)
+// Usar el cliente Supabase singleton para evitar múltiples instancias GoTrueClient
+const riskSupabase = supabase
 
 // =====================================================
 // TIPOS PARA RISK ASSESSMENT Y MONITORING
@@ -67,6 +64,11 @@ export async function createRiskAssessment(data: {
   potential_deviation?: string
 }): Promise<RiskAssessment | null> {
   try {
+    if (!riskSupabase) {
+      console.error('Supabase client not available for risk assessment')
+      return null
+    }
+
     const { data: assessment, error } = await riskSupabase
       .from('risk_assessments')
       .insert(data)

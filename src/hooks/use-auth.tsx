@@ -206,69 +206,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [mounted, user, isSupabaseConfigured])
 
   const handleSignOut = async () => {
-    console.log('👋 Starting simple but effective logout process...')
+    console.log('👋 Simple logout...')
     
     try {
-      // Limpiar el estado local inmediatamente
+      // Limpiar estado local
       setUser(null)
       setProfile(null)
       setLoading(false)
       
+      // Logout de Supabase
       if (isSupabaseConfigured && supabase) {
-        console.log('🔄 Calling supabase.auth.signOut...')
-        await supabase.auth.signOut({ scope: 'global' })
-        console.log('✅ Supabase signOut completed')
+        await supabase.auth.signOut()
+        console.log('✅ Logged out')
       }
       
-      // LIMPIEZA AGRESIVA DE CACHE Y STORAGE
+      // Solo limpiar el storage específico de auth
       if (typeof window !== 'undefined') {
-        try {
-          // Limpiar TODO el storage
-          localStorage.clear()
-          sessionStorage.clear()
-          
-          // Limpiar cache de navegador si está disponible
-          if ('caches' in window) {
-            caches.keys().then(names => {
-              names.forEach(name => {
-                caches.delete(name)
-              })
-            })
-          }
-          
-          console.log('🧹 Complete storage and cache cleared')
-        } catch (storageError) {
-          console.warn('⚠️ Storage cleanup error:', storageError)
-        }
-      }
-      
-      // HARD REFRESH CON CACHE BUSTING
-      console.log('🚀 Executing cache-busting refresh')
-      if (typeof window !== 'undefined') {
-        // Agregar timestamp para evitar cache
-        const timestamp = Date.now()
-        window.location.href = `/login?t=${timestamp}`
-        
-        // Backup: hard reload con cache busting
-        setTimeout(() => {
-          if (window.location.search.includes('?t=')) {
-            window.location.reload(true)
-          }
-        }, 100)
+        localStorage.removeItem('axa-supabase-auth-token')
+        console.log('🧹 Auth token cleared')
       }
       
     } catch (error) {
-      console.error('❌ Error during logout:', error)
-      // Fallback: limpieza completa y refresh con cache busting
-      if (typeof window !== 'undefined') {
-        localStorage.clear()
-        sessionStorage.clear()
-        
-        // Cache busting en fallback también
-        const timestamp = Date.now()
-        window.location.href = `/login?fallback=${timestamp}`
-        window.location.reload(true)
-      }
+      console.error('❌ Logout error:', error)
     }
   }
 

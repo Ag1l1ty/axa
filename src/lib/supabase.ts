@@ -7,15 +7,14 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'dummy_servi
 
 export const isSupabaseConfigured = supabaseUrl !== 'https://dummy.supabase.co' && supabaseAnonKey !== 'dummy_key'
 
-// Cliente con autoRefresh controlado - balance entre funcionalidad y estabilidad
+// Cliente simple y estable
 export const supabase = isSupabaseConfigured ? createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
-    autoRefreshToken: true, // Reactivar para que los 4 horas funcionen
+    autoRefreshToken: true,
     detectSessionInUrl: true,
     storage: typeof window !== 'undefined' ? window.localStorage : undefined,
     storageKey: 'axa-supabase-auth-token',
-    // Configuraciones para estabilidad
     debug: false,
     flowType: 'pkce'
   }
