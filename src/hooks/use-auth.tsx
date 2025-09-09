@@ -290,12 +290,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       
       // Pequeño delay para asegurar que todo se procese
-      await new Promise(resolve => setTimeout(resolve, 200))
-      
-      // Redirect inmediato
-      console.log('🚀 Executing redirect to login')
+      // Hard reset del navegador para limpiar completamente el estado
+      console.log('🚀 Executing HARD reset - clearing all state and reloading')
       if (typeof window !== 'undefined') {
-        window.location.href = '/login'
+        // Forzar recarga completa que limpia TODO el estado de JavaScript
+        window.location.replace('/login')
+        // Backup: si replace no funciona, usar href + reload
+        setTimeout(() => {
+          window.location.href = '/login'
+          window.location.reload()
+        }, 100)
       }
       
     } catch (error) {
@@ -312,7 +316,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch (clearError) {
           console.error('❌ Error clearing storage:', clearError)
         }
-        window.location.href = '/login'
+        // Hard reset también en caso de error
+        window.location.replace('/login')
+        setTimeout(() => window.location.reload(), 100)
       }
     }
   }
