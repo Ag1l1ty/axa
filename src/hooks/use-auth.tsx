@@ -276,7 +276,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const allLocalKeys = Object.keys(localStorage)
           const allSessionKeys = Object.keys(sessionStorage)
           
-          [...allLocalKeys, ...allSessionKeys].forEach(key => {
+          // Combinar arrays sin spread operator para compatibilidad
+          const allKeys = allLocalKeys.concat(allSessionKeys)
+          allKeys.forEach(key => {
             if (key.includes('supabase') || key.includes('auth') || key.startsWith('axa-') || key.startsWith('sb-')) {
               localStorage.removeItem(key)
               sessionStorage.removeItem(key)
