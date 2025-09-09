@@ -7,14 +7,17 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'dummy_servi
 
 export const isSupabaseConfigured = supabaseUrl !== 'https://dummy.supabase.co' && supabaseAnonKey !== 'dummy_key'
 
-// Cliente simple - no singleton complicado que cause problemas
+// Cliente con configuración optimizada para evitar expiración rápida
 export const supabase = isSupabaseConfigured ? createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
-    autoRefreshToken: true,
+    autoRefreshToken: false, // Desactivar auto-refresh problemático
     detectSessionInUrl: true,
     storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-    storageKey: 'axa-supabase-auth-token'
+    storageKey: 'axa-supabase-auth-token',
+    // Configuraciones adicionales para estabilidad
+    debug: false,
+    flowType: 'pkce'
   }
 }) : null
 
