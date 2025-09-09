@@ -233,94 +233,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [mounted, user, isSupabaseConfigured])
 
   const handleSignOut = async () => {
-    console.log('👋 Starting enhanced logout process...')
+    console.log('👋 Starting simple but effective logout process...')
     
     try {
-      // Primero limpiar el estado local inmediatamente
+      // Limpiar el estado local inmediatamente
       setUser(null)
       setProfile(null)
       setLoading(false)
       
       if (isSupabaseConfigured && supabase) {
-        console.log('🔄 Calling supabase.auth.signOut with global scope...')
-        // Usar scope 'global' para limpiar en todos los tabs
+        console.log('🔄 Calling supabase.auth.signOut...')
         await supabase.auth.signOut({ scope: 'global' })
         console.log('✅ Supabase signOut completed')
-        
-        // Reset completo del cliente para evitar múltiples instancias
-        console.log('🔄 Resetting Supabase client to prevent multiple instances...')
-        try {
-          await resetSupabaseClient()
-          console.log('✅ Supabase client reset completed')
-        } catch (resetError) {
-          console.warn('⚠️ Client reset error (non-critical):', resetError)
-        }
       }
       
-      // Limpiar localStorage y sessionStorage más agresivamente
+      // Limpiar storage básico
       if (typeof window !== 'undefined') {
         try {
-          // Lista completa de keys a limpiar
-          const keysToRemove = [
-            'axa-supabase-auth-token',
-            'supabase.auth.token',
-            'sb-' + (process.env.NEXT_PUBLIC_SUPABASE_URL?.split('//')[1]?.split('.')[0] || '') + '-auth-token'
-          ]
-          
-          keysToRemove.forEach(key => {
-            localStorage.removeItem(key)
-            sessionStorage.removeItem(key)
-          })
-          
-          // Limpiar cualquier key que contenga palabras relacionadas
-          const allLocalKeys = Object.keys(localStorage)
-          const allSessionKeys = Object.keys(sessionStorage)
-          
-          // Combinar arrays sin spread operator para compatibilidad
-          const allKeys = allLocalKeys.concat(allSessionKeys)
-          allKeys.forEach(key => {
-            if (key.includes('supabase') || key.includes('auth') || key.startsWith('axa-') || key.startsWith('sb-')) {
-              localStorage.removeItem(key)
-              sessionStorage.removeItem(key)
-            }
-          })
-          
-          console.log('🧹 All authentication storage cleared')
+          localStorage.removeItem('axa-supabase-auth-token')
+          sessionStorage.clear()
+          console.log('🧹 Basic storage cleared')
         } catch (storageError) {
           console.warn('⚠️ Storage cleanup error:', storageError)
         }
       }
       
-      // Pequeño delay para asegurar que todo se procese
-      // Hard reset del navegador para limpiar completamente el estado
-      console.log('🚀 Executing HARD reset - clearing all state and reloading')
+      // SOLUCIÓN SIMPLE Y EFECTIVA: Hard refresh completo
+      console.log('🚀 Executing complete page refresh to clear all state')
       if (typeof window !== 'undefined') {
-        // Forzar recarga completa que limpia TODO el estado de JavaScript
-        window.location.replace('/login')
-        // Backup: si replace no funciona, usar href + reload
-        setTimeout(() => {
-          window.location.href = '/login'
-          window.location.reload()
-        }, 100)
+        // Forzar recarga completa de la página - esto elimina TODAS las instancias de JS
+        window.location.href = '/login'
+        window.location.reload(true)
       }
       
     } catch (error) {
       console.error('❌ Error during logout:', error)
-      // En caso de error, forzar limpieza total y redirect
-      setUser(null)
-      setProfile(null)
-      setLoading(false)
-      
+      // Fallback: forzar refresh inmediato
       if (typeof window !== 'undefined') {
-        try {
-          localStorage.clear()
-          sessionStorage.clear()
-        } catch (clearError) {
-          console.error('❌ Error clearing storage:', clearError)
-        }
-        // Hard reset también en caso de error
-        window.location.replace('/login')
-        setTimeout(() => window.location.reload(), 100)
+        localStorage.clear()
+        sessionStorage.clear()
+        window.location.href = '/login'
+        window.location.reload(true)
       }
     }
   }
