@@ -26,14 +26,34 @@ export function LoginForm({ onForgotPassword }: LoginFormProps) {
     setIsLoading(true)
     setError('')
 
-    const { data, error: authError } = await signIn(email, password)
-
-    if (authError) {
-      setError(authError.message || 'Error al iniciar sesión')
+    console.log('🚀 Login attempt for:', email)
+    
+    try {
+      const { data, error: authError } = await signIn(email, password)
+      
+      console.log('📊 Login result:', { data: !!data, error: !!authError })
+      console.log('👤 User data:', data?.user ? 'Present' : 'Missing')
+      
+      if (authError) {
+        console.error('❌ Auth error:', authError)
+        setError(authError.message || 'Error al iniciar sesión')
+        setIsLoading(false)
+      } else if (data?.user) {
+        console.log('✅ Login successful, redirecting...')
+        // Set loading to false before redirect to prevent stuck state
+        setIsLoading(false)
+        router.push('/')
+        router.refresh()
+      } else {
+        console.warn('⚠️ No user data returned')
+        // Handle case where no user data is returned
+        setError('No se recibieron datos de usuario')
+        setIsLoading(false)
+      }
+    } catch (error) {
+      console.error('💥 Unexpected error during login:', error)
+      setError('Error inesperado durante el login')
       setIsLoading(false)
-    } else if (data.user) {
-      router.push('/')
-      router.refresh()
     }
   }
 
