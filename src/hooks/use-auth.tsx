@@ -205,32 +205,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log('✅ Supabase signOut completed')
       }
       
-      // Limpiar storage básico
+      // LIMPIEZA AGRESIVA DE CACHE Y STORAGE
       if (typeof window !== 'undefined') {
         try {
-          localStorage.removeItem('axa-supabase-auth-token')
+          // Limpiar TODO el storage
+          localStorage.clear()
           sessionStorage.clear()
-          console.log('🧹 Basic storage cleared')
+          
+          // Limpiar cache de navegador si está disponible
+          if ('caches' in window) {
+            caches.keys().then(names => {
+              names.forEach(name => {
+                caches.delete(name)
+              })
+            })
+          }
+          
+          console.log('🧹 Complete storage and cache cleared')
         } catch (storageError) {
           console.warn('⚠️ Storage cleanup error:', storageError)
         }
       }
       
-      // SOLUCIÓN SIMPLE Y EFECTIVA: Hard refresh completo
-      console.log('🚀 Executing complete page refresh to clear all state')
+      // HARD REFRESH CON CACHE BUSTING
+      console.log('🚀 Executing cache-busting refresh')
       if (typeof window !== 'undefined') {
-        // Forzar recarga completa de la página - esto elimina TODAS las instancias de JS
-        window.location.href = '/login'
-        window.location.reload(true)
+        // Agregar timestamp para evitar cache
+        const timestamp = Date.now()
+        window.location.href = `/login?t=${timestamp}`
+        
+        // Backup: hard reload con cache busting
+        setTimeout(() => {
+          if (window.location.search.includes('?t=')) {
+            window.location.reload(true)
+          }
+        }, 100)
       }
       
     } catch (error) {
       console.error('❌ Error during logout:', error)
-      // Fallback: forzar refresh inmediato
+      // Fallback: limpieza completa y refresh con cache busting
       if (typeof window !== 'undefined') {
         localStorage.clear()
         sessionStorage.clear()
-        window.location.href = '/login'
+        
+        // Cache busting en fallback también
+        const timestamp = Date.now()
+        window.location.href = `/login?fallback=${timestamp}`
         window.location.reload(true)
       }
     }
