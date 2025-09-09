@@ -32,13 +32,15 @@ export function AppHeader() {
 
   const handleSignOut = async () => {
     try {
+      console.log('🚀 Header logout clicked - calling signOut');
       await signOut();
-      // Forzar recarga completa para limpiar estado
-      window.location.href = '/login';
     } catch (error) {
       console.error('Error during logout:', error);
-      // Fallback: forzar logout local
-      window.location.href = '/login';
+      // Fallback: forzar logout local inmediato
+      if (typeof window !== 'undefined') {
+        localStorage.clear();
+        window.location.href = '/login';
+      }
     }
   };
 

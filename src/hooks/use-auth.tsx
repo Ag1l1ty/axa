@@ -235,10 +235,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('👋 Starting logout process...')
     
     try {
-      // Primero limpiar el estado local
+      // Primero limpiar el estado local inmediatamente
       setUser(null)
       setProfile(null)
-      setLoading(true)
+      setLoading(false) // Cambiado a false para evitar pantalla de carga innecesaria
       
       if (isSupabaseConfigured && supabase) {
         console.log('🔄 Calling supabase.auth.signOut()...')
@@ -249,21 +249,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Limpiar localStorage manualmente
       if (typeof window !== 'undefined') {
         localStorage.removeItem('axa-supabase-auth-token')
+        localStorage.removeItem('sb-' + process.env.NEXT_PUBLIC_SUPABASE_URL?.split('//')[1]?.split('.')[0] + '-auth-token')
         console.log('🧹 Cleared localStorage')
       }
       
-      // Forzar recarga de la página para limpiar completamente el estado
-      console.log('🔄 Redirecting to login in 1 second...')
-      setTimeout(() => {
-        console.log('🚀 Executing redirect to login')
+      // Redirect inmediato para mejor UX
+      console.log('🚀 Executing immediate redirect to login')
+      if (typeof window !== 'undefined') {
         window.location.href = '/login'
-      }, 1000)
+      }
       
     } catch (error) {
       console.error('❌ Error during logout:', error)
-      // En caso de error, forzar limpieza y redirect
+      // En caso de error, forzar limpieza y redirect inmediato
       setUser(null)
       setProfile(null)
+      setLoading(false)
       if (typeof window !== 'undefined') {
         localStorage.clear()
         window.location.href = '/login'
