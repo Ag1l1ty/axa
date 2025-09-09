@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 
 type CallbackState = 'loading' | 'success' | 'error'
 
-export default function AuthCallbackPage() {
+function AuthCallbackContent() {
   const [state, setState] = useState<CallbackState>('loading')
   const [message, setMessage] = useState('')
   const router = useRouter()
@@ -154,5 +154,22 @@ export default function AuthCallbackPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="w-full max-w-md mx-auto">
+          <CardContent className="text-center space-y-4 pt-6">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-500" />
+            <p className="text-sm text-gray-600">Cargando...</p>
+          </CardContent>
+        </Card>
+      </div>
+    }>
+      <AuthCallbackContent />
+    </Suspense>
   )
 }
