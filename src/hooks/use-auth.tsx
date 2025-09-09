@@ -82,7 +82,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.log('✅ Profile loaded:', profile?.email)
           } catch (profileError) {
             console.error('❌ Profile loading error:', profileError)
-            // Si falla el profile, intentar refresh
             setProfile(null)
           }
         }
@@ -94,13 +93,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // En caso de error grave, limpiar estado y redirigir
         if (error.message?.includes('Multiple GoTrueClient') || error.message?.includes('JWT')) {
-          console.log('🔄 Multiple client error detected - clearing state')
+          console.log('🔄 Multiple client error detected - resetting client')
           setUser(null)
           setProfile(null)
           
-          // Limpiar localStorage y forzar refresh
+          // Reset del cliente y redirect
           if (typeof window !== 'undefined') {
-            localStorage.removeItem('axa-supabase-auth-token')
+            try {
+              await resetSupabaseClient()
+            } catch (resetError) {
+              console.error('❌ Error resetting client:', resetError)
+            }
+            
             console.log('🔄 Redirecting to login due to client error')
             setTimeout(() => {
               window.location.href = '/login'
@@ -146,7 +150,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.log('✅ Profile loaded for:', authUser.email)
           } catch (error) {
             console.error('❌ Error getting profile after auth change:', error)
-            // Si falla el profile, intentar refrescar sesión
             if (error.message?.includes('JWT') || error.message?.includes('expired')) {
               console.log('🔄 Attempting to refresh session due to token error')
               try {
@@ -205,12 +208,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               
               if (error) {
                 console.error('❌ Failed to refresh session:', error)
-                // Si falla la renovación, cerrar sesión
                 console.log('🚪 Auto-logout due to failed session refresh')
                 await handleSignOut()
               } else {
                 console.log('✅ Session refreshed successfully')
-                // Configurar el próximo refresh
                 setupSessionRefresh()
               }
             } catch (error) {
@@ -232,41 +233,85 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [mounted, user, isSupabaseConfigured])
 
   const handleSignOut = async () => {
-    console.log('👋 Starting logout process...')
+    console.log('👋 Starting enhanced logout process...')
     
     try {
       // Primero limpiar el estado local inmediatamente
       setUser(null)
       setProfile(null)
-      setLoading(false) // Cambiado a false para evitar pantalla de carga innecesaria
+      setLoading(false)
       
       if (isSupabaseConfigured && supabase) {
-        console.log('🔄 Calling supabase.auth.signOut()...')
-        await supabase.auth.signOut()
+        console.log('🔄 Calling supabase.auth.signOut with global scope...')
+        // Usar scope 'global' para limpiar en todos los tabs
+        await supabase.auth.signOut({ scope: 'global' })
         console.log('✅ Supabase signOut completed')
+        
+        // Reset completo del cliente para evitar múltiples instancias
+        console.log('🔄 Resetting Supabase client to prevent multiple instances...')
+        try {
+          await resetSupabaseClient()
+          console.log('✅ Supabase client reset completed')
+        } catch (resetError) {
+          console.warn('⚠️ Client reset error (non-critical):', resetError)
+        }
       }
       
-      // Limpiar localStorage manualmente
+      // Limpiar localStorage y sessionStorage más agresivamente
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('axa-supabase-auth-token')
-        localStorage.removeItem('sb-' + process.env.NEXT_PUBLIC_SUPABASE_URL?.split('//')[1]?.split('.')[0] + '-auth-token')
-        console.log('🧹 Cleared localStorage')
+        try {
+          // Lista completa de keys a limpiar
+          const keysToRemove = [
+            'axa-supabase-auth-token',
+            'supabase.auth.token',
+            'sb-' + (process.env.NEXT_PUBLIC_SUPABASE_URL?.split('//')[1]?.split('.')[0] || '') + '-auth-token'
+          ]
+          
+          keysToRemove.forEach(key => {
+            localStorage.removeItem(key)
+            sessionStorage.removeItem(key)
+          })
+          
+          // Limpiar cualquier key que contenga palabras relacionadas
+          const allLocalKeys = Object.keys(localStorage)
+          const allSessionKeys = Object.keys(sessionStorage)
+          
+          [...allLocalKeys, ...allSessionKeys].forEach(key => {
+            if (key.includes('supabase') || key.includes('auth') || key.startsWith('axa-') || key.startsWith('sb-')) {
+              localStorage.removeItem(key)
+              sessionStorage.removeItem(key)
+            }
+          })
+          
+          console.log('🧹 All authentication storage cleared')
+        } catch (storageError) {
+          console.warn('⚠️ Storage cleanup error:', storageError)
+        }
       }
       
-      // Redirect inmediato para mejor UX
-      console.log('🚀 Executing immediate redirect to login')
+      // Pequeño delay para asegurar que todo se procese
+      await new Promise(resolve => setTimeout(resolve, 200))
+      
+      // Redirect inmediato
+      console.log('🚀 Executing redirect to login')
       if (typeof window !== 'undefined') {
         window.location.href = '/login'
       }
       
     } catch (error) {
       console.error('❌ Error during logout:', error)
-      // En caso de error, forzar limpieza y redirect inmediato
+      // En caso de error, forzar limpieza total y redirect
       setUser(null)
       setProfile(null)
       setLoading(false)
+      
       if (typeof window !== 'undefined') {
-        localStorage.clear()
+        try {
+          localStorage.clear()
+          sessionStorage.clear()
+        } catch (clearError) {
+          console.error('❌ Error clearing storage:', clearError)
+        }
         window.location.href = '/login'
       }
     }
