@@ -91,15 +91,7 @@ export async function getProjects(): Promise<Project[]> {
   console.log('🚨 FORCING REAL PROJECTS ONLY - NO MOCK FALLBACK')
   
   try {
-    // Verificar si el usuario está autenticado
-    const { data: { user }, error: authError } = await getDataSupabase().auth.getUser()
-    
-    if (authError || !user) {
-      console.error('⛔ User not authenticated:', authError)
-      throw new Error('Authentication required')
-    }
-
-    console.log('✅ User authenticated, fetching ONLY real projects from Supabase')
+    console.log('✅ Fetching ONLY real projects from Supabase')
 
     const { data: projects, error } = await getDataSupabase()
       .from('projects')
@@ -218,15 +210,7 @@ export async function getDeliveries(): Promise<Delivery[]> {
   console.log('🚨 FORCING REAL DELIVERIES ONLY - NO MOCK FALLBACK')
   
   try {
-    // Verificar si el usuario está autenticado
-    const { data: { user }, error: authError } = await getDataSupabase().auth.getUser()
-    
-    if (authError || !user) {
-      console.error('⛔ User not authenticated:', authError)
-      throw new Error('Authentication required')
-    }
-
-    console.log('✅ User authenticated, fetching ONLY real deliveries from Supabase')
+    console.log('✅ Fetching ONLY real deliveries from Supabase')
 
     const { data: deliveries, error } = await getDataSupabase()
       .from('deliveries')
@@ -346,15 +330,7 @@ export async function getUsers(): Promise<User[]> {
   console.log('🚨 FORCING REAL DATA ONLY - NO MOCK FALLBACK')
   
   try {
-    // Verificar si el usuario está autenticado
-    const { data: { user }, error: authError } = await getDataSupabase().auth.getUser()
-    
-    if (authError || !user) {
-      console.error('⛔ User not authenticated:', authError)
-      throw new Error('Authentication required')
-    }
-
-    console.log('✅ User authenticated, fetching ONLY real users from Supabase')
+    console.log('✅ Fetching ONLY real users from Supabase')
     
     const { data: users, error } = await getDataSupabase()
       .from('users')
