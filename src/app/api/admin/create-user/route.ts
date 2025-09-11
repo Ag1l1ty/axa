@@ -1,21 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-// Cliente admin para el servidor
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-  }
-})
+import { supabaseAdmin } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('🔧 [API] Service Key check:', supabaseServiceKey?.substring(0, 20) + '...')
-    console.log('🔧 [API] Service Key length:', supabaseServiceKey?.length)
     
     const { email, password, userData } = await request.json()
     
