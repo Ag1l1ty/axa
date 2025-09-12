@@ -21,10 +21,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
+  const [lastActivity, setLastActivity] = useState<number>(Date.now())
 
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Monitoreo de actividad del usuario para timeout de 1 hora
+  useEffect(() => {
+    if (!mounted || !user) return
+
+    // Eventos que indican actividad del usuario
+    const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click']
+    
+    const updateActivity = () => {
+      setLastActivity(Date.now())
+    }
+
+    // Agregar listeners
+    activityEvents.forEach(event => {
+      document.addEventListener(event, updateActivity, true)
+    })
+
+    return () => {
+      activityEvents.forEach(event => {
+        document.removeEventListener(event, updateActivity, true)
+      })
+    }
+  }, [mounted, user])
 
   useEffect(() => {
     if (!mounted) return
@@ -176,31 +200,122 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [mounted])
 
-  // Monitoreo de sesión con información detallada (autoRefresh maneja la renovación)
+  // Manejo automático de sesiones expiradas
   useEffect(() => {
     if (!mounted || !isSupabaseConfigured || !supabase || !user) return
     
-    const checkSession = () => {
-      supabase.auth.getSession().then(({ data: { session } }) => {
+    const checkSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error) {
+          console.error('❌ Session check error:', error)
+          
+          // Si hay error de JWT o token expirado, desloguear automáticamente
+          if (error.message?.includes('JWT') || 
+              error.message?.includes('expired') || 
+              error.message?.includes('invalid_token') ||
+              error.message?.includes('token_expired')) {
+            console.log('🚪 Token expired or invalid - auto logout')
+            await handleAutoLogout('Token expirado')
+            return
+          }
+        }
+
+        // Verificar inactividad de 1 hora (3600000 ms)
+        const inactiveTime = Date.now() - lastActivity
+        const inactiveMinutes = Math.floor(inactiveTime / 1000 / 60)
+        
+        if (inactiveTime > 60 * 60 * 1000) { // 1 hora de inactividad
+          console.log(`🚪 User inactive for ${inactiveMinutes} minutes - auto logout`)
+          await handleAutoLogout('Sesión expirada por inactividad (1 hora)')
+          return
+        }
+        
+        // Log de inactividad para debug
+        if (inactiveMinutes > 50) {
+          console.warn(`⏰ User inactive for ${inactiveMinutes} minutes (will logout at 60 minutes)`)
+        }
+        
         if (session?.expires_at) {
           const expiresAt = session.expires_at * 1000
           const minutesLeft = Math.round((expiresAt - Date.now()) / 1000 / 60)
           console.log(`⏰ Session expires at: ${new Date(expiresAt).toLocaleString()}`)
           console.log(`⏱️ Session valid for: ${minutesLeft} minutes`)
           
-          // Alertar si quedan menos de 10 minutos (para debug)
-          if (minutesLeft < 10 && minutesLeft > 0) {
+          // Si la sesión ya expiró, desloguear
+          if (minutesLeft <= 0) {
+            console.log('🚪 Session expired - auto logout')
+            await handleAutoLogout('Sesión expirada')
+            return
+          }
+          
+          // Para sesiones de 1 hora: alertar si quedan menos de 5 minutos
+          if (minutesLeft < 5 && minutesLeft > 0) {
             console.warn(`⚠️ Session expires in ${minutesLeft} minutes - autoRefresh should handle this`)
           }
-        } else {
-          console.log('⚠️ No session found')
+          
+          // Si han pasado más de 50 minutos (cerca de 1 hora), preparar para expiración
+          if (minutesLeft < 10 && minutesLeft > 5) {
+            console.log(`⏰ Session expiring soon: ${minutesLeft} minutes remaining`)
+          }
+        } else if (user) {
+          // Si no hay sesión pero tenemos un usuario, algo está mal
+          console.log('⚠️ No session found but user exists - cleaning up')
+          await handleAutoLogout('Sesión inválida')
         }
-      })
+      } catch (error) {
+        console.error('❌ Session check failed:', error)
+        // En caso de error grave, también desloguear
+        await handleAutoLogout('Error de sesión')
+      }
     }
     
+    // Función para manejar logout automático
+    const handleAutoLogout = async (reason: string) => {
+      console.log(`🚪 Auto logout: ${reason}`)
+      
+      // Limpiar estado inmediatamente
+      setUser(null)
+      setProfile(null)
+      setLoading(false)
+      
+      try {
+        // Limpiar storage
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('axa-supabase-auth-token')
+          localStorage.removeItem('sb-' + process.env.NEXT_PUBLIC_SUPABASE_PROJECT_REF + '-auth-token')
+          sessionStorage.clear()
+          console.log('🧹 Storage cleared')
+        }
+        
+        // Logout de Supabase
+        await supabase.auth.signOut()
+        console.log('✅ Signed out from Supabase')
+        
+        // Mostrar mensaje al usuario y redirigir
+        if (typeof window !== 'undefined') {
+          // Usar setTimeout para asegurar que el estado se actualice
+          setTimeout(() => {
+            alert(`${reason}. Por favor, inicia sesión nuevamente.`)
+            window.location.href = '/login'
+          }, 100)
+        }
+        
+      } catch (logoutError) {
+        console.error('❌ Error during auto logout:', logoutError)
+        // Aunque falle el logout, redirigir
+        if (typeof window !== 'undefined') {
+          setTimeout(() => {
+            window.location.href = '/login'
+          }, 100)
+        }
+      }
+    }
+    
+    // Revisar inmediatamente y luego cada 1 minuto (para timeout de 1 hora)
     checkSession()
-    // Revisar sesión cada 5 minutos para monitoreo
-    const interval = setInterval(checkSession, 5 * 60 * 1000)
+    const interval = setInterval(checkSession, 1 * 60 * 1000)
     
     return () => clearInterval(interval)
   }, [mounted, user, isSupabaseConfigured])

@@ -14,23 +14,39 @@ const getDataSupabase = () => {
   return supabase
 }
 
-// Helper para manejar errores de sesión expirada
+// Helper para manejar errores de sesión expirada con logout automático
 const handleSessionError = async (error: any) => {
-  if (error?.message?.includes('JWT') || error?.message?.includes('expired') || error?.code === 'PGRST301') {
-    console.log('🔄 Session expired, attempting refresh...')
+  if (error?.message?.includes('JWT') || 
+      error?.message?.includes('expired') || 
+      error?.message?.includes('invalid_token') ||
+      error?.message?.includes('token_expired') ||
+      error?.code === 'PGRST301') {
+    console.log('🚪 Session expired detected in data layer - triggering auto logout')
+    
     try {
-      const { error: refreshError } = await supabase.auth.refreshSession()
-      if (refreshError) {
-        console.error('❌ Failed to refresh session:', refreshError)
-        // Redirigir al login si falla la renovación
-        window.location.href = '/login'
-        return false
+      // Limpiar storage inmediatamente
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('axa-supabase-auth-token')
+        localStorage.removeItem('sb-' + process.env.NEXT_PUBLIC_SUPABASE_PROJECT_REF + '-auth-token')
+        sessionStorage.clear()
+        console.log('🧹 Storage cleared from data layer')
       }
-      console.log('✅ Session refreshed, you may retry the operation')
-      return true // Indica que se puede reintentar
+      
+      // Intentar logout de Supabase
+      await supabase.auth.signOut()
+      
+      // Redirigir inmediatamente
+      if (typeof window !== 'undefined') {
+        alert('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.')
+        window.location.href = '/login'
+      }
+      
+      return false
     } catch (refreshError) {
-      console.error('❌ Error refreshing session:', refreshError)
-      window.location.href = '/login'
+      console.error('❌ Error during session cleanup:', refreshError)
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login'
+      }
       return false
     }
   }
@@ -102,6 +118,8 @@ export async function getProjects(): Promise<Project[]> {
 
     if (error) {
       console.error('❌ SUPABASE ERROR - NO FALLBACK:', error)
+      // Verificar si es error de sesión y manejar logout automático
+      await handleSessionError(error)
       throw error
     }
 
@@ -242,6 +260,8 @@ export async function getDeliveries(): Promise<Delivery[]> {
       budgetSpent: delivery.budget_spent,
       estimatedDate: delivery.estimated_date,
       creationDate: delivery.creation_date,
+      actualStartDate: delivery.actual_start_date,
+      actualDeliveryDate: delivery.actual_delivery_date,
       lastBudgetUpdate: delivery.last_budget_update,
       owner: {
         id: delivery.owner_id,
@@ -306,6 +326,8 @@ export async function getDeliveryById(id: string): Promise<Delivery | null> {
       budgetSpent: delivery.budget_spent,
       estimatedDate: delivery.estimated_date,
       creationDate: delivery.creation_date,
+      actualStartDate: delivery.actual_start_date,
+      actualDeliveryDate: delivery.actual_delivery_date,
       lastBudgetUpdate: delivery.last_budget_update,
       owner: {
         id: delivery.owner_id,
@@ -767,6 +789,8 @@ export async function updateDelivery(id: string, updates: Partial<Delivery>): Pr
       ...(updates.errorSolutionTime !== undefined && { error_solution_time: updates.errorSolutionTime }),
       ...(updates.isArchived !== undefined && { is_archived: updates.isArchived }),
       ...(updates.lastBudgetUpdate && { last_budget_update: updates.lastBudgetUpdate }),
+      ...(updates.actualStartDate && { actual_start_date: updates.actualStartDate }),
+      ...(updates.actualDeliveryDate && { actual_delivery_date: updates.actualDeliveryDate }),
       updated_at: new Date().toISOString()
     }
     
@@ -1087,7 +1111,8 @@ export async function aggregateRealMetrics(projects: Project[]) {
     
     // Procesar entregas reales cerradas
     closedDeliveries.forEach(delivery => {
-      const deliveryDate = new Date(delivery.creationDate)
+      // Usar fecha real si está disponible, sino usar creationDate
+      const deliveryDate = new Date(delivery.actualDeliveryDate || delivery.creationDate)
       const monthName = monthOrder[deliveryDate.getMonth()]
       const year = deliveryDate.getFullYear()
       const dataKey = `${monthName}-${year}`
@@ -1100,7 +1125,8 @@ export async function aggregateRealMetrics(projects: Project[]) {
     
     // Procesar errores de entregas (cuando han pasado por TST)
     deliveriesWithErrors.forEach(delivery => {
-      const deliveryDate = new Date(delivery.creationDate)
+      // Usar fecha real si está disponible, sino usar creationDate
+      const deliveryDate = new Date(delivery.actualDeliveryDate || delivery.creationDate)
       const monthName = monthOrder[deliveryDate.getMonth()]
       const year = deliveryDate.getFullYear()
       const dataKey = `${monthName}-${year}`
@@ -1475,6 +1501,8 @@ export async function getPendingRiskAssessmentDeliveries(): Promise<Delivery[]> 
       budgetSpent: delivery.budget_spent,
       estimatedDate: delivery.estimated_date,
       creationDate: delivery.creation_date,
+      actualStartDate: delivery.actual_start_date,
+      actualDeliveryDate: delivery.actual_delivery_date,
       lastBudgetUpdate: delivery.last_budget_update,
       owner: {
         id: delivery.owner_id,

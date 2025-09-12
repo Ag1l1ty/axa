@@ -7,7 +7,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'dummy_servi
 
 export const isSupabaseConfigured = supabaseUrl !== 'https://dummy.supabase.co' && supabaseAnonKey !== 'dummy_key'
 
-// Cliente simple y estable
+// Cliente simple y estable con timeout de 1 hora
 export const supabase = isSupabaseConfigured ? createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
@@ -17,6 +17,20 @@ export const supabase = isSupabaseConfigured ? createClient<Database>(supabaseUr
     storageKey: 'axa-supabase-auth-token',
     debug: false,
     flowType: 'pkce'
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'supabase-js-web'
+    }
+  },
+  db: {
+    schema: 'public'
+  },
+  // Configurar timeout de 1 hora (3600 segundos)
+  realtime: {
+    params: {
+      eventsPerSecond: 2
+    }
   }
 }) : null
 

@@ -41,6 +41,8 @@ export type Delivery = {
   budgetSpent?: number;
   estimatedDate: string;
   creationDate: string;
+  actualStartDate?: string; // Fecha real de inicio (por defecto creationDate)
+  actualDeliveryDate?: string; // Fecha real de entrega para datos históricos
   lastBudgetUpdate?: string;
   owner: {
     id: string;

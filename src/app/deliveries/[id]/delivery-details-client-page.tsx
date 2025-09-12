@@ -37,6 +37,10 @@ export default function DeliveryDetailsClientPage({ id }: { id: string }) {
     const [isConfirmingBudget, setConfirmingBudget] = useState(false);
     const [pendingBudget, setPendingBudget] = useState(0);
     const [isClient, setIsClient] = useState(false);
+    const [actualDeliveryDate, setActualDeliveryDate] = useState("");
+    const [isEditingDate, setIsEditingDate] = useState(false);
+    const [actualStartDate, setActualStartDate] = useState("");
+    const [isEditingStartDate, setIsEditingStartDate] = useState(false);
 
     useEffect(() => {
         setIsClient(true);
@@ -48,6 +52,8 @@ export default function DeliveryDetailsClientPage({ id }: { id: string }) {
                     const initialSpent = deliveryData.budgetSpent || 0;
                     setBudgetSpent(initialSpent);
                     setFormattedBudgetSpent(new Intl.NumberFormat('en-US').format(initialSpent));
+                    setActualStartDate(deliveryData.actualStartDate ? deliveryData.actualStartDate.split('T')[0] : "");
+                    setActualDeliveryDate(deliveryData.actualDeliveryDate ? deliveryData.actualDeliveryDate.split('T')[0] : "");
                     
                     // Cargar historial real desde Supabase
                     const history = await getBudgetHistory(id);
@@ -183,6 +189,62 @@ export default function DeliveryDetailsClientPage({ id }: { id: string }) {
         }
     };
 
+    const handleActualDateUpdate = async () => {
+        if (!actualDeliveryDate) {
+            alert('Por favor selecciona una fecha válida');
+            return;
+        }
+
+        try {
+            // Crear fecha local a mediodía para evitar problemas de timezone
+            const localDate = new Date(actualDeliveryDate + 'T12:00:00');
+            const isoString = localDate.toISOString();
+            
+            const updateSuccess = await updateDelivery(delivery.id, {
+                actualDeliveryDate: isoString
+            });
+
+            if (updateSuccess) {
+                setDelivery(prev => prev ? { ...prev, actualDeliveryDate: isoString } : null);
+                setIsEditingDate(false);
+                console.log('✅ Actual delivery date updated successfully');
+            } else {
+                alert('Error al actualizar la fecha real de entrega');
+            }
+        } catch (error) {
+            console.error('Error updating actual delivery date:', error);
+            alert('Error al actualizar la fecha real de entrega');
+        }
+    };
+
+    const handleActualStartDateUpdate = async () => {
+        if (!actualStartDate) {
+            alert('Por favor selecciona una fecha válida');
+            return;
+        }
+
+        try {
+            // Crear fecha local a mediodía para evitar problemas de timezone
+            const localDate = new Date(actualStartDate + 'T12:00:00');
+            const isoString = localDate.toISOString();
+            
+            const updateSuccess = await updateDelivery(delivery.id, {
+                actualStartDate: isoString
+            });
+
+            if (updateSuccess) {
+                setDelivery(prev => prev ? { ...prev, actualStartDate: isoString } : null);
+                setIsEditingStartDate(false);
+                console.log('✅ Actual start date updated successfully');
+            } else {
+                alert('Error al actualizar la fecha real de inicio');
+            }
+        } catch (error) {
+            console.error('Error updating actual start date:', error);
+            alert('Error al actualizar la fecha real de inicio');
+        }
+    };
+
 
     return (
         <>
@@ -200,10 +262,100 @@ export default function DeliveryDetailsClientPage({ id }: { id: string }) {
                     </Link>
                 </div>
                 
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
                     <ProjectDetailCard title="Status" value={delivery.stage} icon={<Target />} />
                     <ProjectDetailCard title="Budget estimado delivery" value={`$${delivery.budget.toLocaleString()}`} icon={<DollarSign />} />
                     <ProjectDetailCard title="Fecha entrega planeada" value={new Date(delivery.estimatedDate).toLocaleDateString()} icon={<Calendar />} />
+                    <Card className="p-4">
+                        <div className="flex items-center space-x-2 mb-2">
+                            <Calendar className="h-4 w-4 text-muted-foreground" />
+                            <h3 className="font-medium text-sm">Fecha inicio real</h3>
+                        </div>
+                        {!isEditingStartDate ? (
+                            <div className="space-y-2">
+                                <p className="text-lg font-semibold">
+                                    {delivery.actualStartDate ? new Date(delivery.actualStartDate).toLocaleDateString() : new Date(delivery.creationDate).toLocaleDateString()}
+                                </p>
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => setIsEditingStartDate(true)}
+                                    className="text-xs"
+                                >
+                                    {delivery.actualStartDate ? "Editar" : "Editar"}
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                <Input
+                                    type="date"
+                                    value={actualStartDate}
+                                    onChange={(e) => setActualStartDate(e.target.value)}
+                                />
+                                <div className="flex space-x-1">
+                                    <Button size="sm" onClick={handleActualStartDateUpdate} className="text-xs">
+                                        Guardar
+                                    </Button>
+                                    <Button 
+                                        variant="outline" 
+                                        size="sm" 
+                                        onClick={() => {
+                                            setIsEditingStartDate(false);
+                                            setActualStartDate(delivery.actualStartDate ? delivery.actualStartDate.split('T')[0] : "");
+                                        }}
+                                        className="text-xs"
+                                    >
+                                        Cancelar
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                    </Card>
+                    <Card className="p-4">
+                        <div className="flex items-center space-x-2 mb-2">
+                            <Calendar className="h-4 w-4 text-muted-foreground" />
+                            <h3 className="font-medium text-sm">Fecha entrega real</h3>
+                        </div>
+                        {!isEditingDate ? (
+                            <div className="space-y-2">
+                                <p className="text-lg font-semibold">
+                                    {delivery.actualDeliveryDate ? new Date(delivery.actualDeliveryDate).toLocaleDateString() : "No establecida"}
+                                </p>
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => setIsEditingDate(true)}
+                                    className="text-xs"
+                                >
+                                    {delivery.actualDeliveryDate ? "Editar" : "Establecer"}
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                <Input
+                                    type="date"
+                                    value={actualDeliveryDate}
+                                    onChange={(e) => setActualDeliveryDate(e.target.value)}
+                                />
+                                <div className="flex space-x-1">
+                                    <Button size="sm" onClick={handleActualDateUpdate} className="text-xs">
+                                        Guardar
+                                    </Button>
+                                    <Button 
+                                        variant="outline" 
+                                        size="sm" 
+                                        onClick={() => {
+                                            setIsEditingDate(false);
+                                            setActualDeliveryDate(delivery.actualDeliveryDate ? delivery.actualDeliveryDate.split('T')[0] : "");
+                                        }}
+                                        className="text-xs"
+                                    >
+                                        Cancelar
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                    </Card>
                     <ProjectDetailCard title="Deliveries" value={`${currentDeliveryNumber} / ${totalDeliveries}`} icon={<Package />} />
                 </div>
 

@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Area, ComposedChart } from 'recharts';
 import type { Delivery, ProjectStage } from '@/lib/types';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from '../ui/chart';
 import { differenceInDays, format, parseISO, addDays } from 'date-fns';
@@ -55,8 +55,10 @@ export function DeliveryPlanChart({ delivery }: DeliveryPlanChartProps) {
         );
     }
 
-    const startDate = parseISO(delivery.creationDate);
-    const endDate = parseISO(delivery.estimatedDate);
+    // Usar fecha real de inicio si está disponible, sino usar fecha de creación
+    const startDate = parseISO(delivery.actualStartDate || delivery.creationDate);
+    // Usar fecha real de entrega si está disponible, sino usar fecha estimada
+    const endDate = parseISO(delivery.actualDeliveryDate || delivery.estimatedDate);
     
     // 1. Línea planificado: días laborales divididos entre 7 etapas
     const totalBusinessDays = calculateBusinessDays(startDate, endDate);
@@ -109,13 +111,31 @@ export function DeliveryPlanChart({ delivery }: DeliveryPlanChartProps) {
         });
     }
 
+    // Calcular desvío total
+    const plannedEndDate = parseISO(delivery.estimatedDate);
+    const actualEndDate = delivery.actualDeliveryDate ? parseISO(delivery.actualDeliveryDate) : new Date();
+    const totalDeviationDays = calculateBusinessDays(plannedEndDate, actualEndDate);
+    const deviationText = totalDeviationDays > 0 ? `+${totalDeviationDays} días de retraso` : 
+                         totalDeviationDays < 0 ? `${Math.abs(totalDeviationDays)} días adelantado` : 
+                         'Sin desvío';
+
     const allData = [...plannedData, ...realData].sort((a, b) => a.x - b.x);
     const domainMin = Math.min(...allData.map(d => d.x));
     const domainMax = Math.max(...allData.map(d => d.x), endDate.getTime());
 
     return (
-        <ChartContainer config={chartConfig} className="min-h-[350px] w-full">
-            <LineChart
+        <div className="space-y-2">
+            {totalDeviationDays !== 0 && (
+                <div className={`text-sm font-medium p-2 rounded-md ${
+                    totalDeviationDays > 0 
+                        ? 'bg-red-50 text-red-700 border border-red-200' 
+                        : 'bg-green-50 text-green-700 border border-green-200'
+                }`}>
+                    📊 Desvío vs. Planificado: <strong>{deviationText}</strong>
+                </div>
+            )}
+            <ChartContainer config={chartConfig} className="min-h-[350px] w-full">
+                <LineChart
                 accessibilityLayer
                 margin={{
                     top: 5,
@@ -152,11 +172,27 @@ export function DeliveryPlanChart({ delivery }: DeliveryPlanChartProps) {
                             const stageName = props.payload.stage;
                             const date = format(new Date(props.payload.x), 'MMM d, yyyy');
                             const days = props.payload.days;
+                            
+                            // Calcular desvío por etapa si es necesario
+                            let stageDeviation = '';
+                            if (name === 'Real' && props.payload.type === 'Real') {
+                                const stageIndex = STAGES.indexOf(stageName);
+                                const plannedStageData = plannedData[stageIndex];
+                                if (plannedStageData) {
+                                    const deviationDays = days - plannedStageData.days;
+                                    if (deviationDays !== 0) {
+                                        stageDeviation = deviationDays > 0 ? ` (+${deviationDays} días)` : ` (${deviationDays} días)`;
+                                    }
+                                }
+                            }
+                            
                             return (
                                 <div className="flex flex-col">
                                     <span className="font-semibold">{stageName}</span>
                                     <span className="text-xs text-muted-foreground">{name}: {date}</span>
-                                    <span className="text-xs text-muted-foreground">Días laborales: {days}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                        Días laborales: {days}{stageDeviation}
+                                    </span>
                                 </div>
                             )
                         }}
@@ -187,5 +223,6 @@ export function DeliveryPlanChart({ delivery }: DeliveryPlanChartProps) {
                 />
             </LineChart>
         </ChartContainer>
+        </div>
     );
 }
