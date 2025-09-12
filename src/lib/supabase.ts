@@ -7,49 +7,82 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'dummy_servi
 
 export const isSupabaseConfigured = supabaseUrl !== 'https://dummy.supabase.co' && supabaseAnonKey !== 'dummy_key'
 
-// Cliente simple y estable con timeout de 1 hora
-export const supabase = isSupabaseConfigured ? createClient<Database>(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-    storageKey: 'axa-supabase-auth-token',
-    debug: false,
-    flowType: 'pkce'
-  },
-  global: {
-    headers: {
-      'X-Client-Info': 'supabase-js-web'
-    }
-  },
-  db: {
-    schema: 'public'
-  },
-  // Configurar timeout de 1 hora (3600 segundos)
-  realtime: {
-    params: {
-      eventsPerSecond: 2
-    }
-  }
-}) : null
+// Singleton simple usando lazy initialization
+let _supabase: any = null
 
-// Cliente admin
-export const supabaseAdmin = isSupabaseConfigured ? createClient<Database>(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-  }
-}) : null
+export const supabase = (() => {
+  if (_supabase) return _supabase
+  
+  if (!isSupabaseConfigured) return null
+  
+  _supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+      storageKey: 'axa-supabase-auth-token',
+      debug: false,
+      flowType: 'pkce'
+    },
+    global: {
+      headers: {
+        'X-Client-Info': 'axa-singleton-client'
+      }
+    },
+    db: {
+      schema: 'public'
+    },
+    realtime: {
+      params: {
+        eventsPerSecond: 2
+      }
+    }
+  })
+  
+  return _supabase
+})()
+
+// Cliente admin singleton
+let _supabaseAdmin: any = null
+
+export const supabaseAdmin = (() => {
+  if (_supabaseAdmin) return _supabaseAdmin
+  
+  if (!isSupabaseConfigured) return null
+  
+  _supabaseAdmin = createClient<Database>(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+    global: {
+      headers: {
+        'X-Client-Info': 'axa-admin-singleton'
+      }
+    }
+  })
+  
+  return _supabaseAdmin
+})()
 
 // Getter para compatibilidad
 export const getSupabaseClient = () => supabase
 
-// Reset simple que solo fuerza page reload
+// Reset de singleton instances
 export const resetSupabaseClient = () => {
-  console.log('🔄 Hard refresh will clear all client instances')
+  console.log('🔄 Resetting singleton client instances')
+  
+  // Reset variables singleton
+  _supabase = null
+  _supabaseAdmin = null
+  
+  // Limpiar storage
   if (typeof window !== 'undefined') {
-    window.location.reload(true)
+    localStorage.removeItem('axa-supabase-auth-token')
+    localStorage.removeItem(`sb-${process.env.NEXT_PUBLIC_SUPABASE_PROJECT_REF}-auth-token`)
+    sessionStorage.clear()
+    console.log('✅ Client instances and storage cleared')
   }
 }
 

@@ -104,7 +104,7 @@ async function handleAuthError(error: any, operation: string) {
 export async function getProjects(): Promise<Project[]> {
   console.log('🔍 getProjects called, USE_REAL_DATA:', USE_REAL_DATA)
   
-  console.log('🚨 FORCING REAL PROJECTS ONLY - NO MOCK FALLBACK')
+  console.log('✅ Loading real projects from Supabase')
   
   try {
     console.log('✅ Fetching ONLY real projects from Supabase')
@@ -225,7 +225,7 @@ export async function getProjectById(id: string): Promise<Project | null> {
 export async function getDeliveries(): Promise<Delivery[]> {
   console.log('🔍 getDeliveries called, USE_REAL_DATA:', USE_REAL_DATA)
   
-  console.log('🚨 FORCING REAL DELIVERIES ONLY - NO MOCK FALLBACK')
+  console.log('✅ Loading real deliveries from Supabase')
   
   try {
     console.log('✅ Fetching ONLY real deliveries from Supabase')
@@ -349,7 +349,7 @@ export async function getDeliveryById(id: string): Promise<Delivery | null> {
 export async function getUsers(): Promise<User[]> {
   console.log('🔍 getUsers called, USE_REAL_DATA:', USE_REAL_DATA)
   
-  console.log('🚨 FORCING REAL DATA ONLY - NO MOCK FALLBACK')
+  console.log('✅ Loading real users from Supabase')
   
   try {
     console.log('✅ Fetching ONLY real users from Supabase')
@@ -1031,10 +1031,12 @@ export async function getDashboardKpis(projects: Project[]) {
   
   if (USE_REAL_DATA) {
     try {
+      const projectIds = projects.map(p => p.id)
       const { data: deliveries } = await getDataSupabase()
         .from('deliveries')
         .select('*')
         .eq('stage', 'Cerrado')
+        .in('project_id', projectIds)
       
       totalDeliveries = deliveries?.length || 0
     } catch (error) {
@@ -1062,7 +1064,12 @@ export async function aggregateRealMetrics(projects: Project[]) {
 
   try {
     // Obtener todas las entregas
-    const deliveries = await getDeliveries()
+    const allDeliveries = await getDeliveries()
+    
+    // Filtrar entregas solo de los proyectos especificados
+    const projectIds = projects.map(p => p.id)
+    const deliveries = allDeliveries.filter(d => projectIds.includes(d.projectId))
+    
     const closedDeliveries = deliveries.filter(d => d.stage === 'Cerrado')
     const deliveriesWithErrors = deliveries.filter(d => d.errorCount && d.errorCount > 0)
     

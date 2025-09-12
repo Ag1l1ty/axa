@@ -262,7 +262,7 @@ export default function DeliveryDetailsClientPage({ id }: { id: string }) {
                     </Link>
                 </div>
                 
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                     <ProjectDetailCard title="Status" value={delivery.stage} icon={<Target />} />
                     <ProjectDetailCard title="Budget estimado delivery" value={`$${delivery.budget.toLocaleString()}`} icon={<DollarSign />} />
                     <ProjectDetailCard title="Fecha entrega planeada" value={new Date(delivery.estimatedDate).toLocaleDateString()} icon={<Calendar />} />
