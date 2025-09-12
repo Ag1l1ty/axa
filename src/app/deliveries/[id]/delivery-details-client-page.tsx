@@ -1,12 +1,12 @@
 
 "use client"
 
-import { getDeliveryById, getProjectById, updateDelivery, updateProject, getBudgetHistory, saveBudgetHistory } from "@/lib/supabase-data";
+import { getDeliveryById, getProjectById, updateDelivery, updateProject, getBudgetHistory, saveBudgetHistory, updateStageTransitions } from "@/lib/supabase-data";
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { ProjectDetailCard } from "@/components/projects/project-detail-card";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { DollarSign, TrendingUp, AlertTriangle, Calendar, Users, Target, Package, AlertCircle, ArrowLeft, History } from "lucide-react";
+import { DollarSign, TrendingUp, AlertTriangle, Calendar, Users, Target, Package, AlertCircle, ArrowLeft, History, Edit3 } from "lucide-react";
 import { DeliveryBudgetChart } from "@/components/deliveries/delivery-budget-chart";
 import { DeliveryErrorsChart } from "@/components/deliveries/delivery-errors-chart";
 import { DeliveryPlanChart } from "@/components/deliveries/delivery-plan-chart";
@@ -25,6 +25,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter
+} from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { BudgetHistoryEntry, Delivery, Project } from "@/lib/types";
 
 export default function DeliveryDetailsClientPage({ id }: { id: string }) {
@@ -41,6 +49,9 @@ export default function DeliveryDetailsClientPage({ id }: { id: string }) {
     const [isEditingDate, setIsEditingDate] = useState(false);
     const [actualStartDate, setActualStartDate] = useState("");
     const [isEditingStartDate, setIsEditingStartDate] = useState(false);
+    const [isEditingTimeline, setIsEditingTimeline] = useState(false);
+    const [timelineStages, setTimelineStages] = useState<{stage: string, date: string}[]>([]);
+    const [editableStages, setEditableStages] = useState<{stage: string, date: string}[]>([]);
 
     useEffect(() => {
         setIsClient(true);
@@ -64,7 +75,20 @@ export default function DeliveryDetailsClientPage({ id }: { id: string }) {
                 console.error('Error loading delivery data:', error);
             }
         };
+        
+        const loadTimelineData = async () => {
+            try {
+                const { getStageTransitions } = await import("@/lib/supabase-data");
+                const transitions = await getStageTransitions(id);
+                setTimelineStages(transitions);
+                setEditableStages(transitions.map(t => ({ ...t })));
+            } catch (error) {
+                console.error('Error loading timeline data:', error);
+            }
+        };
+        
         loadDeliveryData();
+        loadTimelineData();
     }, [id]);
 
 
@@ -244,6 +268,45 @@ export default function DeliveryDetailsClientPage({ id }: { id: string }) {
             alert('Error al actualizar la fecha real de inicio');
         }
     };
+    
+    const handleSaveTimeline = async () => {
+        try {
+            const success = await updateStageTransitions(delivery.id, editableStages);
+            if (success) {
+                setTimelineStages([...editableStages]);
+                setIsEditingTimeline(false);
+                console.log('✅ Timeline updated successfully');
+                // Recargar la página para refrescar el gráfico
+                window.location.reload();
+            } else {
+                alert('Error al actualizar el timeline. Intente de nuevo.');
+            }
+        } catch (error) {
+            console.error('Error saving timeline:', error);
+            alert('Error al actualizar el timeline. Intente de nuevo.');
+        }
+    };
+    
+    const handleStageChange = (index: number, field: 'stage' | 'date', value: string) => {
+        const newStages = [...editableStages];
+        newStages[index] = { ...newStages[index], [field]: value };
+        setEditableStages(newStages);
+    };
+    
+    const addStage = () => {
+        const newStage = {
+            stage: 'Desarrollo Local',
+            date: new Date().toISOString().split('T')[0] + 'T12:00:00.000Z'
+        };
+        setEditableStages([...editableStages, newStage]);
+    };
+    
+    const removeStage = (index: number) => {
+        if (editableStages.length > 1) {
+            const newStages = editableStages.filter((_, i) => i !== index);
+            setEditableStages(newStages);
+        }
+    };
 
 
     return (
@@ -362,8 +425,21 @@ export default function DeliveryDetailsClientPage({ id }: { id: string }) {
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                     <Card className="lg:col-span-2">
                         <CardHeader>
-                            <CardTitle>Trends Delivery Plans</CardTitle>
-                            <CardDescription>Línea de tiempo planeada vs. el estado real de la entrega.</CardDescription>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <CardTitle>Trends Delivery Plans</CardTitle>
+                                    <CardDescription>Línea de tiempo planeada vs. el estado real de la entrega.</CardDescription>
+                                </div>
+                                <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={() => setIsEditingTimeline(true)}
+                                    className="flex items-center gap-2"
+                                >
+                                    <Edit3 className="h-4 w-4" />
+                                    Editar Timeline
+                                </Button>
+                            </div>
                         </CardHeader>
                         <CardContent className="pl-2">
                             <DeliveryPlanChart delivery={delivery} />
@@ -438,6 +514,80 @@ export default function DeliveryDetailsClientPage({ id }: { id: string }) {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+            <Dialog open={isEditingTimeline} onOpenChange={setIsEditingTimeline}>
+                <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Editar Timeline de Entrega</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 mt-4">
+                        {editableStages.map((stage, index) => (
+                            <div key={index} className="grid grid-cols-3 gap-4 items-center p-4 border rounded-lg">
+                                <div className="space-y-1">
+                                    <Label>Etapa</Label>
+                                    <Select 
+                                        value={stage.stage} 
+                                        onValueChange={(value) => handleStageChange(index, 'stage', value)}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Definición">Definición</SelectItem>
+                                            <SelectItem value="Desarrollo Local">Desarrollo Local</SelectItem>
+                                            <SelectItem value="Ambiente DEV">Ambiente DEV</SelectItem>
+                                            <SelectItem value="Ambiente TST">Ambiente TST</SelectItem>
+                                            <SelectItem value="Ambiente UAT">Ambiente UAT</SelectItem>
+                                            <SelectItem value="Soporte Productivo">Soporte Productivo</SelectItem>
+                                            <SelectItem value="Cerrado">Cerrado</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-1">
+                                    <Label>Fecha</Label>
+                                    <Input
+                                        type="datetime-local"
+                                        value={stage.date.slice(0, 16)}
+                                        onChange={(e) => handleStageChange(index, 'date', e.target.value + ':00.000Z')}
+                                    />
+                                </div>
+                                <div className="flex space-x-2">
+                                    <Button 
+                                        variant="destructive" 
+                                        size="sm"
+                                        onClick={() => removeStage(index)}
+                                        disabled={editableStages.length === 1}
+                                    >
+                                        Eliminar
+                                    </Button>
+                                </div>
+                            </div>
+                        ))}
+                        
+                        <Button 
+                            variant="outline" 
+                            onClick={addStage}
+                            className="w-full"
+                        >
+                            + Agregar Etapa
+                        </Button>
+                    </div>
+                    
+                    <DialogFooter className="mt-6">
+                        <Button 
+                            variant="outline" 
+                            onClick={() => {
+                                setIsEditingTimeline(false);
+                                setEditableStages(timelineStages.map(t => ({ ...t })));
+                            }}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button onClick={handleSaveTimeline}>
+                            Guardar Cambios
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }

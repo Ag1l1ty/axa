@@ -602,6 +602,51 @@ export async function getStageTransitions(deliveryId: string): Promise<Array<{st
   }
 }
 
+export async function updateStageTransitions(deliveryId: string, transitions: Array<{stage: string, date: string}>): Promise<boolean> {
+  if (!USE_REAL_DATA) {
+    console.log('📋 Mock mode: Stage transitions would be updated')
+    return true
+  }
+  
+  try {
+    // Primero, eliminar todas las transiciones existentes para este delivery
+    const { error: deleteError } = await getDataSupabase()
+      .from('stage_transitions')
+      .delete()
+      .eq('delivery_id', deliveryId)
+    
+    if (deleteError) {
+      console.error('Error deleting existing stage transitions:', deleteError)
+      return false
+    }
+    
+    // Luego, insertar las nuevas transiciones
+    if (transitions.length > 0) {
+      const transitionsToInsert = transitions.map((transition, index) => ({
+        delivery_id: deliveryId,
+        from_stage: index > 0 ? transitions[index - 1].stage : null,
+        to_stage: transition.stage,
+        transition_date: transition.date
+      }))
+      
+      const { error: insertError } = await getDataSupabase()
+        .from('stage_transitions')
+        .insert(transitionsToInsert)
+      
+      if (insertError) {
+        console.error('Error inserting stage transitions:', insertError)
+        return false
+      }
+    }
+    
+    console.log(`📋 ${transitions.length} stage transitions updated for delivery ${deliveryId}`)
+    return true
+  } catch (error) {
+    console.error('Error updating stage transitions:', error)
+    return false
+  }
+}
+
 // Función para calcular días laborales entre dos fechas
 export function calculateBusinessDays(startDate: Date, endDate: Date): number {
   let count = 0
