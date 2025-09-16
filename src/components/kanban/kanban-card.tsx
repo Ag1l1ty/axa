@@ -8,6 +8,7 @@ import { Draggable } from 'react-beautiful-dnd';
 import { formatDate, formatNumber } from '@/lib/date-utils';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { useState, useCallback, useEffect } from 'react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,10 +27,38 @@ const STAGES: ProjectStage[] = ['Definición', 'Desarrollo Local', 'Ambiente DEV
 
 
 export function KanbanCard({ delivery, index, onArchive, onUpdateDelivery }: KanbanCardProps) {
+    // Estado local para campos de entrada para evitar loops
+    const [localValues, setLocalValues] = useState({
+        errorCount: delivery.errorCount ?? '',
+        errorSolutionTime: delivery.errorSolutionTime ?? ''
+    });
+
+    // Debounce effect para actualizar la base de datos
+    useEffect(() => {
+        const timeout = setTimeout(() => {
+            // Solo actualizar si hay diferencias con los valores del delivery
+            Object.entries(localValues).forEach(([field, localValue]) => {
+                const deliveryValue = delivery[field as keyof Delivery];
+                const newValue = localValue ? Number(localValue) : undefined;
+                
+                if (deliveryValue !== newValue) {
+                    console.log(`🔄 Debounced update: ${field} from ${deliveryValue} to ${newValue}`);
+                    onUpdateDelivery(delivery.id, { [field]: newValue });
+                }
+            });
+        }, 500); // 500ms de delay
+
+        return () => clearTimeout(timeout);
+    }, [localValues, delivery, onUpdateDelivery]);
 
     const handleTstFieldChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
-        onUpdateDelivery(delivery.id, { [name]: value ? Number(value) : undefined });
+        
+        // Solo actualizar estado local - el useEffect se encarga del debounce
+        setLocalValues(prev => ({
+            ...prev,
+            [name]: value
+        }));
     }
     
     const isTstOrLater = STAGES.indexOf(delivery.stage) >= STAGES.indexOf('Ambiente TST');
@@ -84,7 +113,7 @@ export function KanbanCard({ delivery, index, onArchive, onUpdateDelivery }: Kan
                                             type="number"
                                             className="h-7 text-xs"
                                             placeholder="0"
-                                            value={delivery.errorCount ?? ''}
+                                            value={localValues.errorCount}
                                             onChange={handleTstFieldChange}
                                             onClick={(e) => e.stopPropagation()} // Prevent drag from starting on click
                                             onMouseDown={(e) => e.stopPropagation()} // Prevent drag from starting on click
@@ -99,7 +128,7 @@ export function KanbanCard({ delivery, index, onArchive, onUpdateDelivery }: Kan
                                             type="number"
                                             className="h-7 text-xs"
                                             placeholder="0"
-                                            value={delivery.errorSolutionTime ?? ''}
+                                            value={localValues.errorSolutionTime}
                                             onChange={handleTstFieldChange}
                                             onClick={(e) => e.stopPropagation()}
                                             onMouseDown={(e) => e.stopPropagation()}
