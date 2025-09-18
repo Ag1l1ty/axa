@@ -155,7 +155,7 @@ export async function signIn(email: string, password: string) {
     })
     
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Login timeout after 10 seconds')), 10000)
+      setTimeout(() => reject(new Error('Login timeout after 30 seconds')), 30000)
     })
     
     const { data, error } = await Promise.race([loginPromise, timeoutPromise]) as any
@@ -284,10 +284,27 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   }
   
   try {
-    const { data: { user } } = await supabase.auth.getUser()
+    console.log('🔍 Getting current user from Supabase...')
+    
+    // Intentar con timeout para evitar cuelgues en producción
+    const getUserPromise = supabase.auth.getUser()
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('getCurrentUser timeout')), 20000)
+    })
+    
+    const { data: { user } } = await Promise.race([getUserPromise, timeoutPromise]) as any
+    
+    console.log('✅ getCurrentUser result:', user ? 'User found' : 'No user')
     return user as AuthUser | null
   } catch (error) {
-    console.error('Error getting current user:', error)
+    console.error('❌ Error getting current user:', error)
+    
+    // Si es timeout o Multiple GoTrueClient, no es crítico
+    if (error.message?.includes('timeout') || error.message?.includes('Multiple GoTrueClient')) {
+      console.log('⚠️ Non-critical error in getCurrentUser - returning null')
+      return null
+    }
+    
     return null
   }
 }

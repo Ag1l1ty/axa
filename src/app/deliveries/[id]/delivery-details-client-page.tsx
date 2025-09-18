@@ -84,7 +84,7 @@ export default function DeliveryDetailsClientPage({ id }: { id: string }) {
                 
                 // Add timeout to prevent infinite loading
                 const timeoutPromise = new Promise((_, reject) => {
-                    setTimeout(() => reject(new Error('Timeline loading timeout')), 10000);
+                    setTimeout(() => reject(new Error('Timeline loading timeout')), 30000);
                 });
                 
                 const dataPromise = getStageTransitions(id);

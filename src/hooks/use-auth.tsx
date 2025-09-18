@@ -93,9 +93,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         console.log('🔄 Initializing authentication...')
         
-        // Intentar obtener sesión inicial con timeout
+        // Intentar obtener sesión inicial con timeout más generoso para producción
         const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Auth initialization timeout')), 5000)
+          setTimeout(() => reject(new Error('Auth initialization timeout')), 30000)
         })
         
         const authPromise = getCurrentUser()
