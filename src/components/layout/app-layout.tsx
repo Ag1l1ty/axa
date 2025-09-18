@@ -20,7 +20,19 @@ import { LogOut } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const { currentUser } = useAuth();
+  const { user, profile, loading } = useAuth();
+
+  // Show loading state while authentication is being initialized
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Verificando autenticación...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <SidebarProvider>
@@ -38,15 +50,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <SidebarNav />
         </SidebarContent>
         <SidebarFooter className="p-4 flex flex-col gap-2">
-           {currentUser && (
+           {profile && (
               <div className="flex items-center gap-3">
                   <Avatar className="h-9 w-9">
-                      <AvatarImage src={currentUser.avatar} alt={`${currentUser.firstName} ${currentUser.lastName}`} />
-                      <AvatarFallback>{currentUser.firstName.charAt(0)}{currentUser.lastName.charAt(0)}</AvatarFallback>
+                      <AvatarImage src={profile.avatar} alt={`${profile.firstName} ${profile.lastName}`} />
+                      <AvatarFallback>{profile.firstName.charAt(0)}{profile.lastName.charAt(0)}</AvatarFallback>
                   </Avatar>
                   <div className="flex flex-col">
-                      <span className="text-sm font-medium text-sidebar-foreground">{currentUser.firstName} {currentUser.lastName}</span>
-                      <span className="text-xs text-sidebar-foreground/70">{currentUser.role}</span>
+                      <span className="text-sm font-medium text-sidebar-foreground">{profile.firstName} {profile.lastName}</span>
+                      <span className="text-xs text-sidebar-foreground/70">{profile.role}</span>
                   </div>
               </div>
             )}
