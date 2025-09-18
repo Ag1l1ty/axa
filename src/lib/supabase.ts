@@ -5,7 +5,10 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dummy.supab
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'dummy_key'
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'dummy_service_key'
 
-export const isSupabaseConfigured = supabaseUrl !== 'https://dummy.supabase.co' && supabaseAnonKey !== 'dummy_key'
+// Check if auth is explicitly disabled
+const isAuthDisabled = process.env.NEXT_PUBLIC_SUPABASE_AUTH_DISABLED === 'true'
+
+export const isSupabaseConfigured = !isAuthDisabled && supabaseUrl !== 'https://dummy.supabase.co' && supabaseAnonKey !== 'dummy_key'
 
 // Singleton simple usando lazy initialization
 let _supabase: any = null
