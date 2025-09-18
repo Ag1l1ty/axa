@@ -1,7 +1,7 @@
 
 "use client"
 
-import { getDeliveryById, getProjectById, updateDelivery, updateProject, getBudgetHistory, saveBudgetHistory, updateStageTransitions } from "@/lib/supabase-data";
+import { getDeliveryById, getProjectById, updateDelivery, updateProject, getBudgetHistory, saveBudgetHistory, updateStageTransitions, getStageTransitions } from "@/lib/supabase-data";
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { ProjectDetailCard } from "@/components/projects/project-detail-card";
@@ -52,6 +52,7 @@ export default function DeliveryDetailsClientPage({ id }: { id: string }) {
     const [isEditingTimeline, setIsEditingTimeline] = useState(false);
     const [timelineStages, setTimelineStages] = useState<{stage: string, date: string}[]>([]);
     const [editableStages, setEditableStages] = useState<{stage: string, date: string}[]>([]);
+    const [isLoadingTimeline, setIsLoadingTimeline] = useState(false);
 
     useEffect(() => {
         setIsClient(true);
@@ -78,12 +79,27 @@ export default function DeliveryDetailsClientPage({ id }: { id: string }) {
         
         const loadTimelineData = async () => {
             try {
-                const { getStageTransitions } = await import("@/lib/supabase-data");
-                const transitions = await getStageTransitions(id);
+                console.log('🔄 Loading timeline data for delivery:', id);
+                setIsLoadingTimeline(true);
+                
+                // Add timeout to prevent infinite loading
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error('Timeline loading timeout')), 10000);
+                });
+                
+                const dataPromise = getStageTransitions(id);
+                const transitions = await Promise.race([dataPromise, timeoutPromise]) as {stage: string, date: string}[];
+                
+                console.log('✅ Timeline data loaded:', transitions);
                 setTimelineStages(transitions);
                 setEditableStages(transitions.map(t => ({ ...t })));
             } catch (error) {
-                console.error('Error loading timeline data:', error);
+                console.error('❌ Error loading timeline data:', error);
+                // Fallback to empty array on error
+                setTimelineStages([]);
+                setEditableStages([]);
+            } finally {
+                setIsLoadingTimeline(false);
             }
         };
         
@@ -434,10 +450,11 @@ export default function DeliveryDetailsClientPage({ id }: { id: string }) {
                                     variant="outline" 
                                     size="sm"
                                     onClick={() => setIsEditingTimeline(true)}
+                                    disabled={isLoadingTimeline}
                                     className="flex items-center gap-2"
                                 >
                                     <Edit3 className="h-4 w-4" />
-                                    Editar Timeline
+                                    {isLoadingTimeline ? 'Cargando...' : 'Editar Timeline'}
                                 </Button>
                             </div>
                         </CardHeader>
@@ -519,6 +536,14 @@ export default function DeliveryDetailsClientPage({ id }: { id: string }) {
                     <DialogHeader>
                         <DialogTitle>Editar Timeline de Entrega</DialogTitle>
                     </DialogHeader>
+                    {isLoadingTimeline ? (
+                        <div className="flex items-center justify-center p-8">
+                            <div className="text-center">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                                <p className="text-muted-foreground">Cargando datos del timeline...</p>
+                            </div>
+                        </div>
+                    ) : (
                     <div className="space-y-4 mt-4">
                         {editableStages.map((stage, index) => (
                             <div key={index} className="grid grid-cols-3 gap-4 items-center p-4 border rounded-lg">
@@ -571,6 +596,7 @@ export default function DeliveryDetailsClientPage({ id }: { id: string }) {
                             + Agregar Etapa
                         </Button>
                     </div>
+                    )}
                     
                     <DialogFooter className="mt-6">
                         <Button 

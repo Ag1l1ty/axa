@@ -571,9 +571,12 @@ export async function saveStageTransition(deliveryId: string, fromStage: string 
 }
 
 export async function getStageTransitions(deliveryId: string): Promise<Array<{stage: string, date: string}>> {
+  console.log('🔍 getStageTransitions called for deliveryId:', deliveryId, 'USE_REAL_DATA:', USE_REAL_DATA)
+  
   if (!USE_REAL_DATA) {
     // Simular transiciones mock
     const mockStages = ['Definición', 'Desarrollo Local', 'Ambiente DEV']
+    console.log('📋 Using mock stage transitions')
     return mockStages.map((stage, i) => ({
       stage,
       date: new Date(Date.now() - (mockStages.length - i - 1) * 86400000 * 7).toISOString()
@@ -581,23 +584,66 @@ export async function getStageTransitions(deliveryId: string): Promise<Array<{st
   }
   
   try {
-    const { data: transitions, error } = await getDataSupabase()
+    console.log('🔄 Fetching stage transitions from Supabase...')
+    const supabase = getDataSupabase()
+    
+    if (!supabase) {
+      console.error('❌ Supabase client not available')
+      return []
+    }
+    
+    const { data: transitions, error } = await supabase
       .from('stage_transitions')
       .select('to_stage, transition_date')
       .eq('delivery_id', deliveryId)
       .order('transition_date', { ascending: true })
     
     if (error) {
-      console.error('Error fetching stage transitions:', error)
+      console.error('❌ Error fetching stage transitions from Supabase:', error)
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        hint: error.hint
+      })
+      
+      // If the table doesn't exist, return a fallback with current stage
+      if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
+        console.log('📋 Table stage_transitions does not exist, using fallback data')
+        const delivery = await getDeliveryById(deliveryId)
+        if (delivery) {
+          return [{
+            stage: delivery.stage,
+            date: delivery.creationDate
+          }]
+        }
+      }
+      
       return []
     }
     
-    return transitions?.map(t => ({
+    console.log('✅ Stage transitions fetched successfully:', transitions?.length || 0, 'records')
+    
+    const result = transitions?.map(t => ({
       stage: t.to_stage,
       date: t.transition_date
     })) || []
+    
+    // If no transitions found, create fallback from delivery data
+    if (result.length === 0) {
+      console.log('📋 No stage transitions found, creating fallback from delivery data')
+      const delivery = await getDeliveryById(deliveryId)
+      if (delivery) {
+        return [{
+          stage: delivery.stage,
+          date: delivery.creationDate
+        }]
+      }
+    }
+    
+    return result
   } catch (error) {
-    console.error('Error connecting to Supabase for stage transitions:', error)
+    console.error('❌ Error connecting to Supabase for stage transitions:', error)
+    console.error('Error stack:', error.stack)
     return []
   }
 }
