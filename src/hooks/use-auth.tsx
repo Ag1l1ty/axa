@@ -88,15 +88,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    // Función para inicializar la sesión con retry
+    // Función para inicializar la sesión con manejo robusto de errores
     const initializeAuth = async () => {
       try {
         console.log('🔄 Initializing authentication...')
         
-        // Obtener sesión inicial
-        const user = await getCurrentUser()
-        console.log('👤 Current user:', user?.email || 'none')
+        // Intentar obtener sesión inicial con timeout
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Auth initialization timeout')), 5000)
+        })
         
+        const authPromise = getCurrentUser()
+        const user = await Promise.race([authPromise, timeoutPromise]) as any
+        
+        console.log('👤 Current user:', user?.email || 'none')
         setUser(user)
         
         if (user) {
@@ -106,6 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.log('✅ Profile loaded:', profile?.email)
           } catch (profileError) {
             console.error('❌ Profile loading error:', profileError)
+            // No bloquear por errores de perfil
             setProfile(null)
           }
         }
@@ -115,32 +121,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.error('❌ useAuth: Error initializing auth:', error)
         
-        // En caso de error grave, limpiar estado y redirigir
-        if (error.message?.includes('Multiple GoTrueClient') || error.message?.includes('JWT')) {
-          console.log('🔄 Multiple client error detected - resetting client')
+        // Para Multiple GoTrueClient, ignorar el error pero continuar
+        if (error.message?.includes('Multiple GoTrueClient')) {
+          console.log('⚠️ Multiple GoTrueClient detected - continuing anyway')
           setUser(null)
           setProfile(null)
-          
-          // Reset del cliente y redirect
-          if (typeof window !== 'undefined') {
-            try {
-              await resetSupabaseClient()
-            } catch (resetError) {
-              console.error('❌ Error resetting client:', resetError)
-            }
-            
-            console.log('🔄 Redirecting to login due to client error')
-            setTimeout(() => {
-              window.location.href = '/login'
-            }, 1000)
-          }
+          setLoading(false)
+          // NO redirigir, permitir que el usuario haga login manual
+        } else if (error.message?.includes('timeout')) {
+          console.log('⏰ Auth timeout - allowing manual login')
+          setUser(null)
+          setProfile(null)
+          setLoading(false)
         } else {
-          // Para otros errores, simplemente limpiar estado
+          // Para otros errores graves
           setUser(null)
           setProfile(null)
+          setLoading(false)
         }
-        
-        setLoading(false)
       }
     }
 

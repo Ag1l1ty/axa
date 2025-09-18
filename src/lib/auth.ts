@@ -148,10 +148,17 @@ export async function signIn(email: string, password: string) {
     
     if (!supabase) throw new Error('Supabase client not available')
     
-    const { data, error } = await supabase.auth.signInWithPassword({
+    // Intentar login con timeout para evitar cuelgues
+    const loginPromise = supabase.auth.signInWithPassword({
       email,
       password
     })
+    
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Login timeout after 10 seconds')), 10000)
+    })
+    
+    const { data, error } = await Promise.race([loginPromise, timeoutPromise]) as any
 
     if (error) {
       console.error('❌ Login error from Supabase:', {
@@ -159,6 +166,22 @@ export async function signIn(email: string, password: string) {
         status: error.status,
         name: error.name,
       })
+      
+      // Si es Multiple GoTrueClient, intentar continuar
+      if (error.message?.includes('Multiple GoTrueClient')) {
+        console.log('⚠️ Multiple GoTrueClient in login - attempting to continue')
+        // Intentar obtener sesión actual como fallback
+        try {
+          const session = await supabase.auth.getSession()
+          if (session.data?.session?.user) {
+            console.log('✅ Fallback: Found existing session despite Multiple GoTrueClient')
+            return { data: { user: session.data.session.user }, error: null }
+          }
+        } catch (fallbackError) {
+          console.error('❌ Fallback session check failed:', fallbackError)
+        }
+      }
+      
       throw error
     }
 

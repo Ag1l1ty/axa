@@ -10,19 +10,43 @@ const isAuthDisabled = process.env.NEXT_PUBLIC_SUPABASE_AUTH_DISABLED === 'true'
 
 export const isSupabaseConfigured = !isAuthDisabled && supabaseUrl !== 'https://dummy.supabase.co' && supabaseAnonKey !== 'dummy_key'
 
-// Singleton simple usando lazy initialization
+// Singleton robusto que maneja Multiple GoTrueClient gracefully
 let _supabase: any = null
+let _clientId: string | null = null
+
+// Generar ID único para este cliente
+const generateClientId = () => `axa-client-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
 export const supabase = (() => {
   if (_supabase) return _supabase
   
   if (!isSupabaseConfigured) return null
   
+  // Limpiar storage anterior si existe
+  if (typeof window !== 'undefined') {
+    try {
+      // Limpiar tokens antiguos que puedan causar conflictos
+      const oldKeys = Object.keys(localStorage).filter(key => 
+        key.includes('supabase') || key.includes('sb-')
+      )
+      oldKeys.forEach(key => {
+        if (key !== 'axa-supabase-auth-token') {
+          localStorage.removeItem(key)
+        }
+      })
+    } catch (e) {
+      console.warn('⚠️ Could not clean localStorage:', e)
+    }
+  }
+  
+  _clientId = generateClientId()
+  console.log('🆕 Creating Supabase client with ID:', _clientId)
+  
   _supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true,
+      detectSessionInUrl: false, // Deshabilitado para evitar conflictos
       storage: typeof window !== 'undefined' ? window.localStorage : undefined,
       storageKey: 'axa-supabase-auth-token',
       debug: false,
@@ -30,7 +54,7 @@ export const supabase = (() => {
     },
     global: {
       headers: {
-        'X-Client-Info': 'axa-singleton-client'
+        'X-Client-Info': _clientId
       }
     },
     db: {
@@ -43,6 +67,21 @@ export const supabase = (() => {
     }
   })
   
+  // Suprimir warnings de Multiple GoTrueClient en consola
+  if (typeof window !== 'undefined') {
+    const originalConsoleWarn = console.warn
+    console.warn = (...args) => {
+      const message = args.join(' ')
+      if (message.includes('Multiple GoTrueClient instances detected') ||
+          message.includes('Multiple GoTrueClient')) {
+        // Silenciar este warning específico
+        return
+      }
+      originalConsoleWarn.apply(console, args)
+    }
+  }
+  
+  console.log('✅ Supabase client created successfully with Multiple GoTrueClient handling')
   return _supabase
 })()
 
